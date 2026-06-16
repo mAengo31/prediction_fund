@@ -8,6 +8,8 @@ artifacts and deterministic trust-verdict scoring for replayable analysis.
 It is not a trading system. This deployment surface intentionally includes no live trading,
 no venue credentials, no private keys, no wallets, and no order placement.
 
+No exchange credentials or private keys belong in this repository at this stage.
+
 ## B. Local Docker Compose
 
 Build the containers:
@@ -19,19 +21,24 @@ docker compose build
 Run Postgres and the API:
 
 ```bash
-docker compose up -d postgres app
+cp .env.example .env
+docker compose up -d postgres
 ```
+
+If local port `5432` is already in use, set `POSTGRES_PORT` in `.env` before starting
+Compose.
 
 Run migrations:
 
 ```bash
-docker compose run --rm app scripts/migrate.sh
+docker compose run --rm migrate
 ```
 
 Load sample data:
 
 ```bash
 docker compose run --rm app prediction-desk load-sample-data
+docker compose up -d app
 ```
 
 Call health endpoints:
@@ -44,9 +51,15 @@ curl http://localhost:8000/readyz
 Call sample endpoints:
 
 ```bash
-curl http://localhost:8000/markets
+curl http://localhost:8000/api/v1/markets
 curl -X POST \
-  http://localhost:8000/markets/mkt_sfo_rain_2026_09_01/trust-verdicts/recompute
+  http://localhost:8000/api/v1/markets/mkt_sfo_rain_2026_09_01/trust-verdicts/recompute
+```
+
+Run the full Docker smoke path:
+
+```bash
+scripts/smoke_docker.sh
 ```
 
 Run the standard test suite locally:
@@ -63,6 +76,17 @@ DATABASE_URL=postgresql+psycopg://prediction_desk:prediction_desk@localhost:5432
   scripts/migrate.sh
 ```
 
+Run optional Postgres-backed tests:
+
+```bash
+TEST_DATABASE_URL=postgresql+psycopg://prediction_desk:prediction_desk@localhost:5432/prediction_desk \
+  python -m pytest -m postgres
+```
+
+CI runs the normal SQLite/unit path and a separate `postgres-integration` job. The Postgres
+job starts a service container, runs Alembic against Postgres, and then runs tests marked
+`postgres`.
+
 ## C. Staging Deployment Recommendation
 
 Use a containerized deployment for staging. Render is acceptable for low-friction staging.
@@ -78,6 +102,9 @@ Recommended staging settings:
 - Set `DATABASE_URL` to a managed Postgres connection string.
 - Set `GIT_COMMIT` during image build or release.
 
+Use the safe template in [../deploy/render.yaml](../deploy/render.yaml) as a starting point.
+It contains placeholders only; configure secrets in the hosting platform.
+
 ## D. Production Research Deployment Target
 
 The production research target should be:
@@ -88,6 +115,7 @@ The production research target should be:
 - Private networking/VPC.
 - Centralized logs and metrics.
 - No public write access.
+- No execution service in this API.
 
 Bearer-token auth is temporary. Replace it with stronger service authentication or SSO before
 real production use.
@@ -108,3 +136,5 @@ real production use.
 - Trading keys.
 - Autonomous order placement.
 - Live venue adapters.
+
+This service remains a replayable research API, not an execution service.

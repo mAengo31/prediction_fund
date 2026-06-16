@@ -10,9 +10,11 @@ def test_sample_market_can_be_listed_and_retrieved(tmp_path: Path, monkeypatch) 
     clean, _ = load_samples(database_url)
     client = build_test_client(monkeypatch, database_url=database_url)
 
-    list_response = client.get("/markets")
-    market_response = client.get(f"/markets/{clean.market.market_id}")
-    rule_response = client.get(f"/markets/{clean.market.market_id}/rule-snapshots/latest")
+    list_response = client.get("/api/v1/markets")
+    market_response = client.get(f"/api/v1/markets/{clean.market.market_id}")
+    rule_response = client.get(
+        f"/api/v1/markets/{clean.market.market_id}/rule-snapshots/latest"
+    )
 
     assert list_response.status_code == 200
     markets = list_response.json()
@@ -33,7 +35,7 @@ def test_market_list_supports_filters_and_pagination(tmp_path: Path, monkeypatch
     client = build_test_client(monkeypatch, database_url=database_url)
 
     response = client.get(
-        "/markets",
+        "/api/v1/markets",
         params={"status": "ACTIVE", "venue_id": clean.market.venue_id, "limit": 1, "offset": 0},
     )
 
@@ -46,7 +48,7 @@ def test_missing_market_returns_404(tmp_path: Path, monkeypatch) -> None:
     load_samples(database_url)
     client = build_test_client(monkeypatch, database_url=database_url)
 
-    response = client.get("/markets/does-not-exist")
+    response = client.get("/api/v1/markets/does-not-exist")
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "market_not_found"
+    assert response.json()["error"]["code"] == "market_not_found"

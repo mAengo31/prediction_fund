@@ -1,0 +1,39 @@
+# Safe staging template only. Replace placeholder values in the Render dashboard
+# or with platform-managed secrets. Do not commit real tokens or database URLs.
+services:
+  - type: web
+    name: prediction-desk-api
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    buildCommand: docker build -t prediction-desk .
+    startCommand: >-
+      uvicorn prediction_desk.api.app:create_app
+      --factory
+      --host 0.0.0.0
+      --port $PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: APP_ENV
+        value: staging
+      - key: APP_VERSION
+        value: 0.1.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: prediction-desk-postgres
+          property: connectionString
+      - key: ENABLE_OPENAPI_DOCS
+        value: "false"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: PREDICTION_DESK_API_TOKEN
+        sync: false
+      - key: REQUIRE_API_TOKEN
+        value: "true"
+
+databases:
+  - name: prediction-desk-postgres
+    plan: basic-256mb
+    databaseName: prediction_desk
+    user: prediction_desk

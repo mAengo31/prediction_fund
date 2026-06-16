@@ -10,40 +10,58 @@ from sqlalchemy import Engine
 
 from prediction_desk.api.auth import require_api_token
 from prediction_desk.api.dependencies import get_repository
-from prediction_desk.api.schemas import SERVICE_NAME, HealthResponse, MarketSummary, VersionResponse
+from prediction_desk.api.schemas import (
+    SERVICE_NAME,
+    HealthResponse,
+    MarketSummary,
+    ReadinessResponse,
+    VersionResponse,
+)
 from prediction_desk.config import Settings
 from prediction_desk.domain.enums import MarketStatus
 from prediction_desk.domain.models import Market, MarketRuleSnapshot
 from prediction_desk.domain.verdicts import TrustVerdict
-from prediction_desk.persistence.database import check_database_connection
+from prediction_desk.persistence.database import (
+    check_database_connection,
+    database_appears_migrated,
+)
 from prediction_desk.persistence.repositories import PredictionMarketRepository
 from prediction_desk.scoring.trust_verdict import build_trust_verdict
 
-router = APIRouter()
+health_router = APIRouter()
+v1_router = APIRouter(prefix="/api/v1")
 
 
-@router.get("/healthz", response_model=HealthResponse)
+@health_router.get("/healthz", response_model=HealthResponse)
 def healthz(request: Request) -> HealthResponse:
     settings = _settings(request)
     return _health_response(settings)
 
 
-@router.get(
+@health_router.get(
     "/readyz",
-    response_model=HealthResponse,
+    response_model=ReadinessResponse,
     dependencies=[Depends(require_api_token)],
 )
-def readyz(request: Request) -> HealthResponse:
+def readyz(request: Request) -> ReadinessResponse:
     engine = cast(Engine, request.app.state.engine)
     if not check_database_connection(engine):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="database_unreachable",
         )
-    return _health_response(_settings(request))
+    settings = _settings(request)
+    return ReadinessResponse(
+        status="ok",
+        service=SERVICE_NAME,
+        version=settings.app_version,
+        environment=settings.app_env,
+        database="ok",
+        migrated=database_appears_migrated(engine),
+    )
 
 
-@router.get(
+@health_router.get(
     "/version",
     response_model=VersionResponse,
     dependencies=[Depends(require_api_token)],
@@ -58,7 +76,7 @@ def version(request: Request) -> VersionResponse:
     )
 
 
-@router.get(
+@v1_router.get(
     "/markets",
     response_model=list[MarketSummary],
     dependencies=[Depends(require_api_token)],
@@ -79,7 +97,7 @@ def list_markets(
     return [MarketSummary.from_market(market) for market in markets]
 
 
-@router.get(
+@v1_router.get(
     "/markets/{market_id}",
     response_model=Market,
     dependencies=[Depends(require_api_token)],
@@ -91,7 +109,7 @@ def get_market(
     return _market_or_404(repo, market_id)
 
 
-@router.get(
+@v1_router.get(
     "/markets/{market_id}/rule-snapshots/latest",
     response_model=MarketRuleSnapshot,
     dependencies=[Depends(require_api_token)],
@@ -107,7 +125,7 @@ def get_latest_rule_snapshot(
     return snapshot
 
 
-@router.get(
+@v1_router.get(
     "/markets/{market_id}/trust-verdicts/latest",
     response_model=TrustVerdict,
     dependencies=[Depends(require_api_token)],
@@ -123,7 +141,7 @@ def get_latest_trust_verdict(
     return verdict
 
 
-@router.post(
+@v1_router.post(
     "/markets/{market_id}/trust-verdicts/recompute",
     response_model=TrustVerdict,
     dependencies=[Depends(require_api_token)],

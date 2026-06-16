@@ -13,9 +13,11 @@ def test_recompute_trust_verdict_creates_and_returns_verdict(
     client = build_test_client(monkeypatch, database_url=database_url)
 
     recompute_response = client.post(
-        f"/markets/{clean.market.market_id}/trust-verdicts/recompute"
+        f"/api/v1/markets/{clean.market.market_id}/trust-verdicts/recompute"
     )
-    latest_response = client.get(f"/markets/{clean.market.market_id}/trust-verdicts/latest")
+    latest_response = client.get(
+        f"/api/v1/markets/{clean.market.market_id}/trust-verdicts/latest"
+    )
 
     assert recompute_response.status_code == 200
     verdict = recompute_response.json()
@@ -32,10 +34,10 @@ def test_latest_trust_verdict_returns_404_when_missing(tmp_path: Path, monkeypat
     clean, _ = load_samples(database_url)
     client = build_test_client(monkeypatch, database_url=database_url)
 
-    response = client.get(f"/markets/{clean.market.market_id}/trust-verdicts/latest")
+    response = client.get(f"/api/v1/markets/{clean.market.market_id}/trust-verdicts/latest")
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "trust_verdict_not_found"
+    assert response.json()["error"]["code"] == "trust_verdict_not_found"
 
 
 def test_recompute_trust_verdict_missing_market_returns_404(
@@ -45,7 +47,7 @@ def test_recompute_trust_verdict_missing_market_returns_404(
     load_samples(database_url)
     client = build_test_client(monkeypatch, database_url=database_url)
 
-    response = client.post("/markets/does-not-exist/trust-verdicts/recompute")
+    response = client.post("/api/v1/markets/does-not-exist/trust-verdicts/recompute")
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "market_not_found"
+    assert response.json()["error"]["code"] == "market_not_found"

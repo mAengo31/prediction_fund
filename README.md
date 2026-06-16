@@ -49,7 +49,9 @@ mypy
 ```
 
 CI runs on pull requests and pushes to `main`. It installs the package on Python 3.12,
-runs ruff, mypy, pytest, and verifies the Alembic migration against SQLite.
+runs ruff, mypy, pytest, and verifies the Alembic migration against SQLite. A separate
+`postgres-integration` CI job starts Postgres, runs Alembic against Postgres, and runs
+the tests marked `postgres`.
 
 ## CLI Examples
 
@@ -92,8 +94,9 @@ Useful local endpoints:
 ```bash
 curl http://localhost:8000/healthz
 curl http://localhost:8000/readyz
-curl http://localhost:8000/markets
-curl -X POST http://localhost:8000/markets/mkt_sfo_rain_2026_09_01/trust-verdicts/recompute
+curl http://localhost:8000/api/v1/markets
+curl -X POST \
+  http://localhost:8000/api/v1/markets/mkt_sfo_rain_2026_09_01/trust-verdicts/recompute
 ```
 
 Authentication is controlled by `REQUIRE_API_TOKEN` and `PREDICTION_DESK_API_TOKEN`.
@@ -104,15 +107,24 @@ See [docs/api.md](docs/api.md) for endpoint details.
 ## Docker Compose Quickstart
 
 ```bash
+cp .env.example .env
 docker compose build
-docker compose up -d postgres app
-docker compose run --rm app scripts/migrate.sh
+docker compose up -d postgres
+docker compose run --rm migrate
 docker compose run --rm app prediction-desk load-sample-data
+docker compose up -d app
 curl http://localhost:8000/healthz
-curl http://localhost:8000/markets
+curl http://localhost:8000/api/v1/markets
 ```
 
-See [docs/deployment.md](docs/deployment.md) for staging and production deployment notes.
+Run the deterministic Docker smoke path:
+
+```bash
+scripts/smoke_docker.sh
+```
+
+See [docs/deployment.md](docs/deployment.md) and [deploy/README.md](deploy/README.md)
+for staging and production deployment notes.
 
 ## Architecture Notes
 
@@ -128,6 +140,8 @@ data versions, source references, reason codes, and risk scores so later analysi
 reconstruct why an action was selected.
 
 Live trading and execution are deliberately absent. The API reads stored artifacts and
-recomputes deterministic verdicts from stored snapshots. Future exchange adapters should
-write captured market data into the same point-in-time snapshot model before any research
-or backtest consumes it.
+recomputes deterministic verdicts from stored snapshots. This service is not an execution
+service. No exchange credentials, venue credentials, wallets, private keys, or signing keys
+belong in this repository at this stage. Future exchange adapters should write captured
+market data into the same point-in-time snapshot model before any research or backtest
+consumes it.

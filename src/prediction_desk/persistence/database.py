@@ -39,6 +39,15 @@ def check_database_connection(engine: Engine) -> bool:
         return False
 
 
+def database_appears_migrated(engine: Engine) -> bool:
+    try:
+        with engine.connect() as connection:
+            version = connection.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
+            return version.scalar_one_or_none() is not None
+    except SQLAlchemyError:
+        return False
+
+
 @contextmanager
 def session_scope(database_url: str | None = None) -> Generator[Session]:
     engine = build_engine(database_url)

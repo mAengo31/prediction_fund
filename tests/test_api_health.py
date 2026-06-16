@@ -17,6 +17,7 @@ def test_health_endpoint_is_public_when_auth_required(
     response = client.get("/healthz")
 
     assert response.status_code == 200
+    assert response.headers["x-request-id"]
     assert response.json() == {
         "status": "ok",
         "service": "prediction-desk",
@@ -33,6 +34,8 @@ def test_ready_endpoint_reports_database_availability(tmp_path: Path, monkeypatc
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+    assert response.json()["database"] == "ok"
+    assert response.json()["migrated"] is False
 
 
 def test_ready_endpoint_returns_503_when_database_unavailable(
@@ -47,4 +50,7 @@ def test_ready_endpoint_returns_503_when_database_unavailable(
     response = client.get("/readyz")
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "database_unreachable"
+    body = response.json()
+    assert body["error"]["code"] == "database_unreachable"
+    assert body["error"]["message"] == "Database is unreachable."
+    assert body["error"]["request_id"]

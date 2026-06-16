@@ -19,11 +19,26 @@ class HealthResponse(BaseModel):
     environment: str
 
 
+class ReadinessResponse(HealthResponse):
+    database: str
+    migrated: bool
+
+
 class VersionResponse(BaseModel):
     service: str
     version: str
     commit: str | None
     environment: str
+
+
+class ErrorDetail(BaseModel):
+    code: str
+    message: str
+    request_id: str
+
+
+class ErrorResponse(BaseModel):
+    error: ErrorDetail
 
 
 class MarketSummary(BaseModel):

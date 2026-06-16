@@ -35,6 +35,9 @@ packages = ["src/prediction_desk"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+  "postgres: integration tests that require TEST_DATABASE_URL",
+]
 
 [tool.ruff]
 line-length = 100
