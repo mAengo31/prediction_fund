@@ -59,6 +59,21 @@ class PredictionMarketRepository:
         self.session.flush()
         return market
 
+    def list_markets(
+        self,
+        *,
+        status: MarketStatus | None = None,
+        venue_id: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[Market]:
+        stmt = select(MarketRecord).order_by(MarketRecord.market_id).limit(limit).offset(offset)
+        if status is not None:
+            stmt = stmt.where(MarketRecord.status == status.value)
+        if venue_id is not None:
+            stmt = stmt.where(MarketRecord.venue_id == venue_id)
+        return [_market_from_record(record) for record in self.session.scalars(stmt)]
+
     def get_market(self, market_id: str) -> Market | None:
         record = self.session.get(MarketRecord, market_id)
         return _market_from_record(record) if record else None
@@ -93,6 +108,19 @@ class PredictionMarketRepository:
 
     def get_orderbook_snapshot(self, snapshot_id: str) -> OrderBookSnapshot | None:
         record = self.session.get(OrderBookSnapshotRecord, snapshot_id)
+        return _orderbook_snapshot_from_record(record) if record else None
+
+    def get_latest_orderbook_snapshot(self, market_id: str) -> OrderBookSnapshot | None:
+        stmt = (
+            select(OrderBookSnapshotRecord)
+            .where(OrderBookSnapshotRecord.market_id == market_id)
+            .order_by(
+                desc(OrderBookSnapshotRecord.captured_at),
+                desc(OrderBookSnapshotRecord.snapshot_id),
+            )
+            .limit(1)
+        )
+        record = self.session.scalar(stmt)
         return _orderbook_snapshot_from_record(record) if record else None
 
     def save_trade_print(self, trade_print: TradePrint) -> TradePrint:

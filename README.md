@@ -1,8 +1,8 @@
 # prediction-desk
 
-`prediction-desk` is the first commit of an institutional-grade prediction-market
-quant research system. The focus is point-in-time, reproducible analysis: market
-rules, prices, scores, and verdicts are represented as replayable snapshots.
+`prediction-desk` is an institutional-grade prediction-market quant research system.
+The focus is point-in-time, reproducible analysis: market rules, prices, scores, and
+verdicts are represented as replayable snapshots.
 
 ## What This Round Implements
 
@@ -15,6 +15,9 @@ rules, prices, scores, and verdicts are represented as replayable snapshots.
 - Alembic initial migration.
 - SQLite default configuration with schema choices that remain Postgres-compatible.
 - Typer CLI commands for local setup, sample data, and sample scoring.
+- Internal FastAPI service for reading stored markets and recomputing deterministic
+  trust verdicts from stored snapshots.
+- Dockerfile, Docker Compose Postgres, and GitHub Actions CI.
 - Pytest coverage for domain validation, scoring, verdict actions, and persistence roundtrips.
 
 ## Intentionally Out Of Scope
@@ -27,7 +30,7 @@ This is not a trading bot. This round intentionally excludes:
 - Wallets, private keys, custody, or signing.
 - API credentials or exchange secrets.
 - Execution algorithms.
-- Production deployment.
+- Public trading or execution services.
 
 ## Setup
 
@@ -44,6 +47,9 @@ pytest
 ruff check .
 mypy
 ```
+
+CI runs on pull requests and pushes to `main`. It installs the package on Python 3.12,
+runs ruff, mypy, pytest, and verifies the Alembic migration against SQLite.
 
 ## CLI Examples
 
@@ -71,6 +77,43 @@ Use a custom database URL:
 prediction-desk init-db --database-url sqlite:///local_research.db
 ```
 
+## API Service
+
+Run the internal API locally against the default SQLite database:
+
+```bash
+prediction-desk init-db
+prediction-desk load-sample-data
+scripts/run_api.sh
+```
+
+Useful local endpoints:
+
+```bash
+curl http://localhost:8000/healthz
+curl http://localhost:8000/readyz
+curl http://localhost:8000/markets
+curl -X POST http://localhost:8000/markets/mkt_sfo_rain_2026_09_01/trust-verdicts/recompute
+```
+
+Authentication is controlled by `REQUIRE_API_TOKEN` and `PREDICTION_DESK_API_TOKEN`.
+`/healthz` is always public. In staging and production, set `REQUIRE_API_TOKEN=true`.
+
+See [docs/api.md](docs/api.md) for endpoint details.
+
+## Docker Compose Quickstart
+
+```bash
+docker compose build
+docker compose up -d postgres app
+docker compose run --rm app scripts/migrate.sh
+docker compose run --rm app prediction-desk load-sample-data
+curl http://localhost:8000/healthz
+curl http://localhost:8000/markets
+```
+
+See [docs/deployment.md](docs/deployment.md) for staging and production deployment notes.
+
 ## Architecture Notes
 
 The system separates canonical domain schemas from persistence records. Pydantic models
@@ -84,6 +127,7 @@ book snapshot, and as-of timestamp inputs. The resulting verdict stores model ve
 data versions, source references, reason codes, and risk scores so later analysis can
 reconstruct why an action was selected.
 
-Live trading and execution are deliberately absent. Future exchange adapters should write
-captured market data into the same point-in-time snapshot model before any research or
-backtest consumes it.
+Live trading and execution are deliberately absent. The API reads stored artifacts and
+recomputes deterministic verdicts from stored snapshots. Future exchange adapters should
+write captured market data into the same point-in-time snapshot model before any research
+or backtest consumes it.

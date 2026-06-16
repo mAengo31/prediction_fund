@@ -1,0 +1,14 @@
+.git/
+.omx/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+prediction_desk.db
+*.sqlite
+*.sqlite3
