@@ -16,9 +16,9 @@ The first Azure staging deployment is active in:
 - ACR: `predictiondesk3bbbab44cusacr`
 
 Alembic migrations have passed through revision `20260617_0013`, and fixture staging smoke
-has passed. Public-read collection has not been run. Failed partial resource groups from
-restricted-region attempts, `prediction-desk-staging-rg` and
-`prediction-desk-staging-wus2-rg`, should be deleted after explicit operator approval.
+has passed. A first tiny manual public-read pilot has been run against Kalshi only. Failed
+partial resource groups from restricted-region attempts, `prediction-desk-staging-rg` and
+`prediction-desk-staging-wus2-rg`, were deleted after explicit operator approval.
 
 Current hardening status:
 
@@ -26,8 +26,40 @@ Current hardening status:
 - `/docs` and `/openapi.json` return `404` in staging.
 - PostgreSQL backup retention is 7 days and PITR metadata is present.
 - Restore testing has not been performed.
-- No Azure budget alert was found by CLI; create one before public-read pilots.
+- Azure budget `prediction-desk-staging-monthly` is configured at $25/month with 50%,
+  80%, and 100% actual-cost notifications.
 - Only the Azure-services PostgreSQL firewall rule remains after operator validation.
+
+## First Public-Read Pilot
+
+The first manual public-read pilot used:
+
+```bash
+CONFIRM_PUBLIC_READ_ONLY=true PUBLIC_READ_VENUES=kalshi MAX_PAYLOADS=5 \
+  scripts/staging_public_read_pilot.sh
+```
+
+Result:
+
+- Status: `COMPLETED`
+- Venue: `kalshi`
+- Payloads archived: 1
+- Markets processed: 5
+- Errors: 0
+- Endpoint observed: `MARKET_LIST`
+- Raw payload external id: none, because this was a catalog/list payload
+
+The pilot added five Kalshi catalog markets without detail, orderbook, or price-history
+payloads. Coverage dropped from `100` to `50` because those sparse public-read markets have
+expected missing-data gaps: rule snapshots, orderbooks, price snapshots, and liquidity
+snapshots. This is expected for a market-list-only pilot and is a measurement outcome, not
+an execution signal.
+
+The current DataOps public-read path only calls the market catalog/list fetch. Although the
+Kalshi adapter has read-only methods for market detail, orderbook, and price history, the
+orchestrator does not yet target those endpoints in `MANUAL_PUBLIC_FETCH`. Hold additional
+catalog-only pilots unless the goal is repeated catalog idempotence; implement targeted
+read-only follow-up before trying to close the newly introduced coverage gaps.
 
 ## Architecture
 
