@@ -102,6 +102,9 @@ def test_manual_public_fetch_targeted_detail_and_orderbook_use_existing_mapping(
         liquidity = repo.list_liquidity_snapshots(
             "kalshi_market_kxweather_nyc_rain_20260930"
         )
+        mapping = repo.get_mapping_by_canonical_market_id(
+            "kalshi_market_kxweather_nyc_rain_20260930"
+        )
         rule_snapshot = repo.get_latest_rule_snapshot(
             "kalshi_market_kxweather_nyc_rain_20260930"
         )
@@ -113,6 +116,8 @@ def test_manual_public_fetch_targeted_detail_and_orderbook_use_existing_mapping(
     assert result.run.liquidity_snapshots_created == 1
     assert result.run.quality_reports_created >= 1
     assert rule_snapshot is not None
+    assert mapping is not None
+    assert mapping.canonical_event_id == "kalshi_event_kxweather_nyc_rain"
     assert orderbooks
     assert prices
     assert liquidity
@@ -230,12 +235,15 @@ def _patch_kalshi_public_fetches(
     ) -> RawVenuePayload:
         assert allow_network is True
         calls.append(("orderbook", external_market_id))
-        return original_orderbook(
+        payload = original_orderbook(
             fixture_adapter,
             external_market_id,
             allow_network=False,
             captured_at=captured_at,
         )
+        response_payload = dict(payload.response_payload)
+        response_payload.pop("event_ticker", None)
+        return payload.model_copy(update={"response_payload": response_payload})
 
     monkeypatch.setattr(KalshiReadOnlyAdapter, "fetch_market_catalog", fake_catalog)
     monkeypatch.setattr(KalshiReadOnlyAdapter, "fetch_market_detail", fake_detail)

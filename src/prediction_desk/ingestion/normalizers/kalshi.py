@@ -185,6 +185,7 @@ def _normalize_orderbook_payload(raw_payload: RawVenuePayload) -> NormalizedVenu
     bids.sort(key=lambda level: level.price, reverse=True)
     asks.sort(key=lambda level: level.price)
     market_id = _market_id(ticker)
+    event_ticker = _optional_str(body.get("event_ticker"))
     return NormalizedVenuePayload(
         orderbook_snapshot=OrderBookSnapshot(
             snapshot_id=f"ob_kalshi_{_slug(ticker)}_{raw_payload.response_hash[:16]}",
@@ -202,9 +203,9 @@ def _normalize_orderbook_payload(raw_payload: RawVenuePayload) -> NormalizedVenu
         ),
         mapping=_mapping(
             raw_payload=raw_payload,
-            event_ticker=_optional_str(body.get("event_ticker")),
+            event_ticker=event_ticker,
             ticker=ticker,
-            event_id=_event_id(_optional_str(body.get("event_ticker")) or ticker),
+            event_id=_event_id(event_ticker) if event_ticker is not None else None,
             market_id=market_id,
             external_url=None,
         ),
@@ -216,7 +217,7 @@ def _mapping(
     raw_payload: RawVenuePayload,
     event_ticker: str | None,
     ticker: str,
-    event_id: str,
+    event_id: str | None,
     market_id: str,
     external_url: str | None,
 ) -> VenueMarketMapping:
