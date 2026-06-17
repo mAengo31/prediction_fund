@@ -1,0 +1,30 @@
+{
+  "endpoint_type": "MARKET_DETAIL",
+  "external_id": "KXWEATHER-NYC-RAIN-20260930",
+  "captured_at": "2026-06-16T12:00:00Z",
+  "source_url": "fixture://kalshi/markets/KXWEATHER-NYC-RAIN-20260930",
+  "request_params": {},
+  "response_payload": {
+    "market": {
+      "ticker": "KXWEATHER-NYC-RAIN-20260930",
+      "event_ticker": "KXWEATHER-NYC-RAIN",
+      "event_title": "NYC rainfall September 2026",
+      "title": "Will NYC record at least 1 inch of rain by September 30, 2026?",
+      "subtitle": "YES if official Central Park rainfall reaches at least 1 inch.",
+      "category": "Weather",
+      "status": "active",
+      "open_time": "2026-06-16T12:00:00Z",
+      "close_time": "2026-09-30T23:59:00Z",
+      "expiration_time": "2026-10-01T16:00:00Z",
+      "rules_primary": "This market resolves to Yes if the official National Weather Service Central Park station reports cumulative rainfall greater than or equal to 1 inch for September 2026 by 11:59 PM ET on September 30, 2026.",
+      "rules_secondary": "The final settlement source is the National Weather Service. Kalshi is the settlement authority.",
+      "settlement_source": "National Weather Service",
+      "settlement_authority": "Kalshi",
+      "timezone": "ET",
+      "url": "https://kalshi.example.test/markets/KXWEATHER-NYC-RAIN-20260930"
+    }
+  },
+  "metadata": {
+    "fixture_kind": "market_detail"
+  }
+}

@@ -16,7 +16,7 @@ def test_persistence_roundtrip_for_core_objects(tmp_path: Path) -> None:
     init_db(database_url)
     engine = build_engine(database_url)
     session_factory = build_session_factory(engine)
-    clean, _ = sample_markets()
+    clean, *_ = sample_markets()
     asof = datetime(2026, 6, 16, 13, 0, tzinfo=UTC)
 
     with session_factory.begin() as session:

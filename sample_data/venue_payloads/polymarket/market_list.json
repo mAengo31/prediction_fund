@@ -1,0 +1,43 @@
+{
+  "endpoint_type": "MARKET_LIST",
+  "external_id": null,
+  "captured_at": "2026-06-16T12:00:00Z",
+  "source_url": "fixture://polymarket/gamma/markets",
+  "request_params": {
+    "limit": 10
+  },
+  "response_payload": {
+    "markets": [
+      {
+        "id": "pm-nyc-temp-20260704",
+        "conditionId": "0xabc123nyctemp",
+        "questionID": "0xquestion123",
+        "question": "Will NYC reach 90 degrees on July 4, 2026?",
+        "description": "This market resolves according to the official National Weather Service high temperature for Central Park.",
+        "eventTitle": "NYC July 4 weather",
+        "slug": "nyc-90-degrees-july-4-2026",
+        "category": "Weather",
+        "active": true,
+        "closed": false,
+        "resolved": false,
+        "createdAt": "2026-06-16T12:00:00Z",
+        "endDate": "2026-07-04T23:59:00Z",
+        "outcomes": [
+          "Yes",
+          "No"
+        ],
+        "clobTokenIds": [
+          "1111111111111111111111111111111111111111111111111111111111111111",
+          "2222222222222222222222222222222222222222222222222222222222222222"
+        ],
+        "resolutionSource": "National Weather Service",
+        "resolutionRules": "This market resolves to Yes if the National Weather Service reports a high temperature greater than or equal to 90 degrees Fahrenheit at Central Park on July 4, 2026 by 11:59 PM ET.",
+        "settlementAuthority": "Polymarket",
+        "timezone": "ET"
+      }
+    ]
+  },
+  "metadata": {
+    "fixture_kind": "catalog"
+  }
+}

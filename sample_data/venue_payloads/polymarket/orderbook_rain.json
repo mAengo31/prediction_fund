@@ -1,0 +1,38 @@
+{
+  "endpoint_type": "ORDERBOOK",
+  "external_id": "0xrainnycsep2026",
+  "captured_at": "2026-06-16T12:05:00Z",
+  "source_url": "fixture://polymarket/clob/book/rain-yes-token",
+  "request_params": {
+    "token_id": "rain-yes-token"
+  },
+  "response_payload": {
+    "market": "0xrainnycsep2026",
+    "condition_id": "0xrainnycsep2026",
+    "asset_id": "rain-yes-token",
+    "bids": [
+      {
+        "price": "0.67",
+        "size": "100"
+      },
+      {
+        "price": "0.66",
+        "size": "75"
+      }
+    ],
+    "asks": [
+      {
+        "price": "0.70",
+        "size": "95"
+      },
+      {
+        "price": "0.71",
+        "size": "120"
+      }
+    ]
+  },
+  "schema_version": "venue_fixture_payload_v1",
+  "metadata": {
+    "fixture_kind": "cross_venue_divergence_material"
+  }
+}

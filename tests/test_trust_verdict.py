@@ -10,7 +10,7 @@ from prediction_desk.scoring.trust_verdict import build_trust_verdict
 
 
 def test_high_resolution_risk_forces_no_trade() -> None:
-    _, ambiguous = sample_markets()
+    _, ambiguous, *_ = sample_markets()
 
     verdict = build_trust_verdict(
         market=ambiguous.market,
@@ -24,7 +24,7 @@ def test_high_resolution_risk_forces_no_trade() -> None:
 
 
 def test_missing_orderbook_requires_manual_review_when_rules_are_clean() -> None:
-    clean, _ = sample_markets()
+    clean, *_ = sample_markets()
 
     verdict = build_trust_verdict(
         market=clean.market,
@@ -39,7 +39,7 @@ def test_missing_orderbook_requires_manual_review_when_rules_are_clean() -> None
 
 
 def test_wide_binary_spread_selects_passive_only_for_clean_market() -> None:
-    clean, _ = sample_markets()
+    clean, *_ = sample_markets()
     wide_book = OrderBookSnapshot(
         snapshot_id="wide_book",
         market_id=clean.market.market_id,

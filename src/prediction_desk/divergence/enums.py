@@ -1,0 +1,49 @@
+"""Enums for cross-venue divergence signals."""
+
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+class DivergenceSignalCategory(StrEnum):
+    PRICE_DIVERGENCE = "PRICE_DIVERGENCE"
+    SPREAD_ADJUSTED_DIVERGENCE = "SPREAD_ADJUSTED_DIVERGENCE"
+    PERSISTENCE = "PERSISTENCE"
+    STALE_SIDE = "STALE_SIDE"
+    LOW_LIQUIDITY = "LOW_LIQUIDITY"
+    LOW_DATA_QUALITY = "LOW_DATA_QUALITY"
+    INTEGRITY_CONTEXT = "INTEGRITY_CONTEXT"
+    EQUIVALENCE_CONTEXT = "EQUIVALENCE_CONTEXT"
+    UNKNOWN = "UNKNOWN"
+
+
+class DivergenceSignalSeverity(StrEnum):
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
+
+
+class DivergenceActionHint(StrEnum):
+    NONE = "NONE"
+    WATCH = "WATCH"
+    RESEARCH = "RESEARCH"
+    MANUAL_REVIEW = "MANUAL_REVIEW"
+    DO_NOT_COMPARE = "DO_NOT_COMPARE"
+
+
+class DivergenceStatus(StrEnum):
+    NO_DIVERGENCE = "NO_DIVERGENCE"
+    WATCH = "WATCH"
+    MATERIAL_DIVERGENCE = "MATERIAL_DIVERGENCE"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+    DO_NOT_COMPARE = "DO_NOT_COMPARE"
+
+
+class DivergenceRunStatus(StrEnum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    PARTIAL = "PARTIAL"
+

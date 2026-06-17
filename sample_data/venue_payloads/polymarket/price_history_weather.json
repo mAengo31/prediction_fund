@@ -1,0 +1,22 @@
+{
+  "endpoint_type": "PRICE_HISTORY",
+  "external_id": "0xabc123nyctemp",
+  "captured_at": "2026-06-16T12:10:00Z",
+  "source_url": "fixture://polymarket/clob/prices-history",
+  "request_params": {
+    "market": "0xabc123nyctemp"
+  },
+  "response_payload": {
+    "history": [
+      {
+        "t": "2026-06-16T11:30:00Z",
+        "available_at": "2026-06-16T12:10:00Z",
+        "p": "0.62",
+        "token_id": "1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    ]
+  },
+  "metadata": {
+    "fixture_kind": "price_history"
+  }
+}

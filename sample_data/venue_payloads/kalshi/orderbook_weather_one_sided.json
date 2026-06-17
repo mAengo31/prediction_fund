@@ -1,0 +1,24 @@
+{
+  "endpoint_type": "ORDERBOOK",
+  "external_id": "KXWEATHER-NYC-RAIN-20260930",
+  "captured_at": "2026-06-16T12:45:00Z",
+  "source_url": "fixture://kalshi/markets/KXWEATHER-NYC-RAIN-20260930/orderbook",
+  "request_params": {},
+  "response_payload": {
+    "ticker": "KXWEATHER-NYC-RAIN-20260930",
+    "event_ticker": "KXWEATHER-NYC-RAIN",
+    "orderbook": {
+      "yes": [
+        [
+          55,
+          40
+        ]
+      ],
+      "no": []
+    }
+  },
+  "metadata": {
+    "fixture_kind": "orderbook",
+    "book_shape": "one_sided"
+  }
+}

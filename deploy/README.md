@@ -77,6 +77,10 @@ Keep these out of the repository and out of images:
 
 ## Non-Trading Boundary
 
-This service is not an execution service. It exposes stored canonical data and deterministic
-trust-verdict recomputation. It must not place orders, create wallets, hold keys, or call
-venue trading APIs.
+This service is not an execution service. It exposes stored canonical data, deterministic
+resolution analysis, trust-verdict recomputation, and point-in-time admissibility replay.
+It also supports read-only fixture/manual-public ingestion for archived public market data.
+It also exposes canonical market data, integrity assessments, contract equivalence, and
+equivalence-gated divergence context as research artifacts only. It must not place orders,
+create wallets, hold keys, call venue trading APIs, calculate PnL, or run LLM-backed rule
+parsing in this stage.

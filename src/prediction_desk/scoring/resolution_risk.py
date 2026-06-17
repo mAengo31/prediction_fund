@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 
 from prediction_desk.domain.models import Market, MarketRuleSnapshot
+from prediction_desk.resolution.models import AmbiguityAssessment
 
 AMBIGUOUS_TIMING_PATTERNS: tuple[tuple[str, re.Pattern[str], int], ...] = (
     ("ambiguous_timing_soon", re.compile(r"\bsoon\b", re.IGNORECASE), 12),
@@ -40,17 +41,20 @@ class ResolutionRiskResult:
 
 
 def score_resolution_risk(
-    market: Market, rule_snapshot: MarketRuleSnapshot | None
+    market: Market,
+    rule_snapshot: MarketRuleSnapshot | None,
+    ambiguity_assessment: AmbiguityAssessment | None = None,
 ) -> ResolutionRiskResult:
     """Score resolution risk from deterministic text and metadata heuristics."""
 
     del market
 
     if rule_snapshot is None:
-        return ResolutionRiskResult(
+        result = ResolutionRiskResult(
             resolution_risk_score=100,
             reason_codes=["missing_rule_snapshot"],
         )
+        return _with_ambiguity(result, ambiguity_assessment)
 
     score = 0
     reason_codes: list[str] = []
@@ -84,10 +88,11 @@ def score_resolution_risk(
         score += 15
         reason_codes.append("multiple_possible_resolution_sources")
 
-    return ResolutionRiskResult(
+    result = ResolutionRiskResult(
         resolution_risk_score=min(score, 100),
         reason_codes=reason_codes,
     )
+    return _with_ambiguity(result, ambiguity_assessment)
 
 
 def _has_text(value: str | None) -> bool:
@@ -102,3 +107,34 @@ def _has_multiple_source_signal(raw_rule_text: str) -> bool:
         flags=re.IGNORECASE,
     )
     return any(pattern.search(source_text) for _, pattern in MULTIPLE_SOURCE_PATTERNS)
+
+
+def _with_ambiguity(
+    result: ResolutionRiskResult,
+    ambiguity_assessment: AmbiguityAssessment | None,
+) -> ResolutionRiskResult:
+    if ambiguity_assessment is None:
+        return result
+    reason_codes = _dedupe(
+        [
+            *result.reason_codes,
+            *ambiguity_assessment.reason_codes,
+        ]
+    )
+    return ResolutionRiskResult(
+        resolution_risk_score=max(
+            result.resolution_risk_score,
+            ambiguity_assessment.overall_score,
+        ),
+        reason_codes=reason_codes,
+    )
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for value in values:
+        if value not in seen:
+            deduped.append(value)
+            seen.add(value)
+    return deduped

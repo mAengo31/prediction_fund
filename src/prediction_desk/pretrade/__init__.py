@@ -1,0 +1,2 @@
+"""Pre-trade admissibility gate."""
+

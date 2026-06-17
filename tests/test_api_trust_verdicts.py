@@ -9,7 +9,7 @@ def test_recompute_trust_verdict_creates_and_returns_verdict(
     tmp_path: Path, monkeypatch
 ) -> None:
     database_url = sqlite_url(tmp_path / "verdicts.db")
-    clean, _ = load_samples(database_url)
+    clean, *_ = load_samples(database_url)
     client = build_test_client(monkeypatch, database_url=database_url)
 
     recompute_response = client.post(
@@ -31,7 +31,7 @@ def test_recompute_trust_verdict_creates_and_returns_verdict(
 
 def test_latest_trust_verdict_returns_404_when_missing(tmp_path: Path, monkeypatch) -> None:
     database_url = sqlite_url(tmp_path / "verdicts.db")
-    clean, _ = load_samples(database_url)
+    clean, *_ = load_samples(database_url)
     client = build_test_client(monkeypatch, database_url=database_url)
 
     response = client.get(f"/api/v1/markets/{clean.market.market_id}/trust-verdicts/latest")

@@ -3,12 +3,24 @@
 ## A. Deployment Philosophy
 
 `prediction-desk` is currently a read-only/internal research API. It exposes stored market
-artifacts and deterministic trust-verdict scoring for replayable analysis.
+artifacts, deterministic resolution-corpus analysis, deterministic trust-verdict scoring,
+point-in-time admissibility replay, and read-only fixture/manual-public ingestion for
+replayable analysis. It also exposes canonical market-data snapshots, data-quality reports,
+fast-lane integrity assessments, and a run-once ingestion scheduler suitable for cron or
+deployment jobs. It also exposes deterministic cross-venue equivalence assessments for
+contract comparison before any cross-venue research comparison. It also exposes
+deterministic cross-venue divergence assessments as research context only after
+equivalence permits comparison.
 
 It is not a trading system. This deployment surface intentionally includes no live trading,
 no venue credentials, no private keys, no wallets, and no order placement.
+Read-only ingestion does not change that boundary; authenticated venue APIs remain out of
+scope.
 
 No exchange credentials or private keys belong in this repository at this stage.
+Replay is admissibility research only. It does not calculate PnL, simulate execution, or
+place orders. Equivalence and divergence are research metadata only; they do not compute
+execution, EV, or trading instructions.
 
 ## B. Local Docker Compose
 
@@ -53,10 +65,40 @@ Call sample endpoints:
 ```bash
 curl http://localhost:8000/api/v1/markets
 curl -X POST \
+  http://localhost:8000/api/v1/markets/mkt_sfo_rain_2026_09_01/resolution/analyze-latest
+curl -X POST \
+  http://localhost:8000/api/v1/markets/mkt_rate_cut_rule_change_2026/rule-snapshots/diff-latest
+curl -X POST \
   http://localhost:8000/api/v1/markets/mkt_sfo_rain_2026_09_01/trust-verdicts/recompute
+curl -X POST \
+  http://localhost:8000/api/v1/replay/runs \
+  -H "Content-Type: application/json" \
+  -d '{"name":"sample replay","policy_name":"trust_verdict_v1","start_time":"2026-06-16T12:00:00Z","end_time":"2026-06-16T13:00:00Z","interval_seconds":3600,"market_ids":["mkt_cpi_yoy_at_least_3pct_2026_09"],"max_steps":10,"persist_steps":true,"force_recompute_verdicts":true,"metadata":{}}'
+curl -X POST \
+  http://localhost:8000/api/v1/ingestion/run-once \
+  -H "Content-Type: application/json" \
+  -d '{"venue_name":"kalshi","mode":"fixture","limit":10,"allow_network":false,"analyze_rules":true,"recompute_verdicts":true,"derive_market_data":true,"compute_quality":true,"metadata":{}}'
+curl http://localhost:8000/api/v1/markets/kalshi_market_kxweather_nyc_rain_20260930/market-data/latest
+curl -X POST \
+  http://localhost:8000/api/v1/equivalence/assess \
+  -H "Content-Type: application/json" \
+  -d '{"left_market_id":"kalshi_market_kxweather_nyc_rain_20260930","right_market_id":"polymarket_market_0xrainnycsep2026","asof_timestamp":"2026-06-16T12:45:00Z","force":false,"config":{}}'
+curl -X POST \
+  http://localhost:8000/api/v1/divergence/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"market_id":"kalshi_market_kxweather_nyc_rain_20260930","asof_timestamp":"2026-06-16T12:20:00Z","force":false,"config":{}}'
 ```
 
-Run the full Docker smoke path:
+Run the full Docker smoke path. It validates Postgres startup, Alembic migrations, sample
+loading, `/healthz`, `/readyz`, `/api/v1/markets`, resolution analysis, rule diffing,
+run-once fixture ingestion, venue mappings, canonical market data, data-quality reports,
+integrity analysis, integrity-aware trust-verdict recomputation, replay run creation,
+equivalence candidate generation, equivalence assessment/classes, divergence analysis and
+runs, pretrade checks, simulated paper execution, paper portfolio readback, deterministic
+research strategies, research feature/proposal generation, proposal evaluation, research
+summary and attribution readback, replay summary readback, replay
+market-data/equivalence/divergence/paper/research metadata, and the `integrity_gate_v1`,
+`pretrade_gate_v1`, `paper_sim_gate_v1`, and `research_policy_v1` replay policies:
 
 ```bash
 scripts/smoke_docker.sh
@@ -115,7 +157,20 @@ The production research target should be:
 - Private networking/VPC.
 - Centralized logs and metrics.
 - No public write access.
-- No execution service in this API.
+- No live execution service in this API.
+- No venue adapters or live exchange calls in this API.
+- No authenticated venue adapters or live trading calls in this API.
+- No background ingestion daemon in this API; use explicit run-once jobs for fixture or
+  manual public sample ingestion.
+- Paper execution endpoints are simulated-only and must remain disconnected from venue
+  order routing and real account state.
+- No integrity signal should be interpreted as an alpha claim or proof of manipulation.
+- No equivalence or divergence assessment should be interpreted as a trading instruction.
+- Pre-trade gate endpoints evaluate hypothetical intents only; they must not be connected
+  directly to venue order routing or real account state.
+- Strategy research endpoints generate hypotheses, proposals, traces, and simulated
+  attribution only; they must continue to depend on the pre-trade gate and simulated paper
+  layer rather than live venue access.
 
 Bearer-token auth is temporary. Replace it with stronger service authentication or SSO before
 real production use.
@@ -130,11 +185,18 @@ real production use.
 
 ## F. Out Of Scope For Deployment
 
-- Execution services.
+- Live execution services.
 - Exchange credentials.
 - Wallet custody.
 - Trading keys.
 - Autonomous order placement.
 - Live venue adapters.
+- Authenticated Kalshi or Polymarket endpoints.
+- LLM-backed rule parsing.
+- Scenario simulation workers.
+- PnL attribution.
+- Strategy research automation connected to live venues.
+- Cross-venue execution or spread trading.
+- Real pre-trade account exposure from venue accounts.
 
 This service remains a replayable research API, not an execution service.

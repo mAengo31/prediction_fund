@@ -1,0 +1,37 @@
+{
+  "endpoint_type": "MARKET_DETAIL",
+  "external_id": "0xrainnycsep2026",
+  "captured_at": "2026-06-01T12:00:00+00:00",
+  "source_url": "https://gamma-api.polymarket.com/markets/0xrainnycsep2026",
+  "request_params": {
+    "id": "0xrainnycsep2026"
+  },
+  "response_payload": {
+    "market": {
+      "id": "0xrainnycsep2026",
+      "conditionId": "0xrainnycsep2026",
+      "questionID": "rainnycsep2026",
+      "slug": "nyc-rain-september-2026",
+      "eventTitle": "NYC rainfall September 2026",
+      "question": "Will NYC record at least 1 inch of rain by September 30, 2026?",
+      "description": "Resolves Yes if the National Weather Service reports cumulative rainfall at Central Park of at least 1 inch for September 2026 by 11:59 PM ET on September 30, 2026.",
+      "resolutionRules": "This market resolves Yes if the official National Weather Service Central Park station reports cumulative rainfall greater than or equal to 1 inch for September 2026 by 11:59 PM ET on September 30, 2026. The National Weather Service daily climate report is the final settlement source. If the report is corrected before settlement, the corrected official value is used.",
+      "resolutionSource": "National Weather Service",
+      "settlementAuthority": "Polymarket",
+      "timezone": "ET",
+      "category": "weather",
+      "outcomes": ["Yes", "No"],
+      "clobTokenIds": ["rain-yes-token", "rain-no-token"],
+      "active": true,
+      "closed": false,
+      "resolved": false,
+      "createdAt": "2026-05-01T00:00:00+00:00",
+      "endDate": "2026-09-30T23:59:00-04:00",
+      "url": "https://polymarket.com/event/nyc-rain-september-2026"
+    }
+  },
+  "schema_version": "venue_fixture_payload_v1",
+  "metadata": {
+    "fixture_kind": "cross_venue_equivalence_positive"
+  }
+}
