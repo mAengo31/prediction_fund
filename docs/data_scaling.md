@@ -60,7 +60,7 @@ scripts, including staging smoke:
 ```bash
 API_BASE_URL="https://your-staging-api.example.com" \
 PREDICTION_DESK_API_TOKEN="..." \
-scripts/staging_smoke.sh
+scripts/azure_staging_smoke.sh
 ```
 
 Manual public fetch mode is explicit, read-only, GET-oriented, credential-free, and must
@@ -131,8 +131,9 @@ For a manual public collection job, pass `--allow-network` explicitly. Do not pr
 credentials; none are required or accepted.
 
 For staging operations, prefer the runbook in
-[staging_dataops_pilot.md](staging_dataops_pilot.md). It covers migrations, fixture smoke,
-public-read approval, database count inspection, coverage/gap readback, and rollback.
+[azure_staging.md](azure_staging.md) and [staging_dataops_pilot.md](staging_dataops_pilot.md).
+They cover Azure deployment, migrations, fixture smoke, public-read approval, database
+count inspection, coverage/gap readback, and rollback.
 
 ## Research Use
 

@@ -1,181 +1,109 @@
 # Staging Deployment
 
-This guide prepares the first safe staging deployment for prediction-desk. Staging is a
-read-only, non-executing research API backed by persistent Postgres. It must not include
-live trading, order routing, venue trading credentials, wallets, private keys, real account
-IDs, real positions, MiroFish runtime execution, LLM calls, or background trading jobs.
+The current staging target is Microsoft Azure. Use Azure Container Apps for the API, Azure
+Database for PostgreSQL Flexible Server for persistent data, Azure Container Registry for
+the image, and optional Azure Container Apps Jobs for fixture-only DataOps validation.
 
-## Target Shape
+This staging environment is read-only and non-executing. It must not include live trading,
+order routing, venue credentials, wallets, private keys, real account IDs, real positions,
+MiroFish runtime execution, LLM calls, or public-read schedules.
 
-The default target is a Render-style managed container deployment:
+## Azure Deployment Packet
 
-- Docker web service built from `Dockerfile`.
-- Managed Postgres attached through `DATABASE_URL`.
-- Bearer-token API auth enabled.
-- OpenAPI docs disabled by default.
-- Migrations run explicitly with `scripts/migrate.sh` or
-  `scripts/staging_migrate_and_verify.sh`.
-- Fixture-only DataOps validation runs before any public-read pilot.
+Use [azure_staging.md](azure_staging.md) for the full operator runbook.
 
-The web service command is:
+Azure deployment files:
 
-```bash
-uvicorn prediction_desk.api.app:create_app --factory --host 0.0.0.0 --port "$PORT"
-```
+- [../deploy/azure/main.bicep](../deploy/azure/main.bicep)
+- [../deploy/azure/parameters.staging.json.example](../deploy/azure/parameters.staging.json.example)
+- [../deploy/azure/staging.env.example](../deploy/azure/staging.env.example)
+- [../deploy/azure/commands.md](../deploy/azure/commands.md)
 
-## Required Environment Variables
+Azure helper scripts:
 
-Set these in the platform secret/config UI. Do not commit or print real values:
+- `scripts/azure_deploy_staging.sh`
+- `scripts/azure_build_push.sh`
+- `scripts/azure_migrate_and_verify.sh`
+- `scripts/azure_staging_smoke.sh`
+- `scripts/azure_inspect_counts.sh`
+
+## Required Runtime Environment
 
 ```bash
 APP_ENV=staging
 REQUIRE_API_TOKEN=true
 ENABLE_OPENAPI_DOCS=false
-DATABASE_URL=<managed Postgres internal URL>
-PREDICTION_DESK_API_TOKEN=<platform secret>
+DATABASE_URL=<managed Postgres URL>
+PREDICTION_DESK_API_TOKEN=<secret>
 LOG_LEVEL=INFO
+APP_VERSION=<optional>
+GIT_COMMIT=<optional>
 ```
 
-Optional release metadata:
+Do not commit or print real values.
+
+## Deployment Sequence
 
 ```bash
-APP_VERSION=<git sha or release tag>
-GIT_COMMIT=<git sha>
+az login
+az account set --subscription "<subscription id>"
+export AZURE_RESOURCE_GROUP=prediction-desk-staging-cus-rg
+export AZURE_LOCATION=centralus
+export AZURE_CONTAINER_REGISTRY=predictiondesk3bbbab44cusacr
+export AZURE_CONTAINER_APP_NAME=prediction-desk-staging-api
+export AZURE_POSTGRES_SERVER_NAME=prediction-desk-staging-pg-cus-3bbbab
+export AZURE_POSTGRES_ADMIN_PASSWORD="<secret>"
+export PREDICTION_DESK_API_TOKEN="<secret>"
+export IMAGE_TAG="$(git rev-parse --short HEAD)"
+CONFIRM_AZURE_STAGING_DEPLOY=true scripts/azure_deploy_staging.sh
 ```
 
-Use [../deploy/staging.env.example](../deploy/staging.env.example) as a checklist only.
+Run migrations:
 
-## Render-Style Blueprint
+```bash
+export DATABASE_URL="postgresql+psycopg://predictiondeskadmin:<encoded-password>@<server>.postgres.database.azure.com:5432/prediction_desk?sslmode=require"
+scripts/azure_migrate_and_verify.sh
+```
 
-`deploy/render.yaml` defines:
+Run fixture smoke:
 
-- `prediction-desk-api` web service using the Dockerfile.
-- `prediction-desk-postgres` managed Postgres.
-- Required staging env vars.
-- A commented fixture-only cron template.
+```bash
+export API_BASE_URL="https://<container-app-fqdn>"
+scripts/azure_staging_smoke.sh
+```
 
-The fixture cron is intentionally commented. Uncomment it only after staging fixture smoke
-passes, backups are confirmed, and an operator approves a low-frequency validation job.
-The safe fixture command is:
+Inspect counts:
+
+```bash
+scripts/azure_inspect_counts.sh
+```
+
+## Fixture Job
+
+The safe validation job is:
 
 ```bash
 prediction-desk dataops-cycle --mode FIXTURE
 ```
 
-Do not schedule public-read collection in this round.
-
-If the Render CLI is authenticated, validate the blueprint before applying it:
-
-```bash
-render blueprints validate deploy/render.yaml --output json
-```
-
-The CLI requires an authenticated Render workspace for semantic validation.
-
-## Migration
-
-Run migrations as an explicit release step:
+Enable the optional Azure Container Apps Job only after fixture smoke and backup checks
+pass:
 
 ```bash
-DATABASE_URL="<staging database url>" scripts/staging_migrate_and_verify.sh
+DEPLOY_FIXTURE_DATAOPS_JOB=true CONFIRM_AZURE_STAGING_DEPLOY=true scripts/azure_deploy_staging.sh
 ```
 
-The helper hides the URL, runs `scripts/migrate.sh`, and then prints read-only table
-counts unless `SKIP_DB_COUNTS=true`.
+## Public-Read Pilot
 
-Equivalent direct command:
+Do not schedule public-read collection. The manual pilot requires:
 
 ```bash
-DATABASE_URL="<staging database url>" scripts/migrate.sh
+CONFIRM_PUBLIC_READ_ONLY=true MAX_PAYLOADS=5 scripts/staging_public_read_pilot.sh
 ```
 
-No deletion or compaction is performed by the migration helper.
+Run it only after staging deploy, migrations, fixture smoke, and backup confirmation.
 
-## Fixture Smoke
+## Legacy Render Template
 
-After deploy and migration:
-
-```bash
-API_BASE_URL="https://your-staging-api.example.com" \
-PREDICTION_DESK_API_TOKEN="<token from platform secret>" \
-scripts/staging_smoke.sh
-```
-
-The script calls health, readiness, market listing, DataOps defaults, universes, collection
-plans, fixture collection, coverage, gap detection, and coverage/gap readback. It uses the
-bearer token when provided and does not print it.
-
-## DB Counts
-
-If the staging database URL is available to the operator shell:
-
-```bash
-DATABASE_URL="<staging database url>" python scripts/inspect_db_counts.py
-DATABASE_URL="<staging database url>" python scripts/inspect_db_counts.py --json
-```
-
-This script is read-only.
-
-## Coverage And Gaps
-
-Use API readback:
-
-```bash
-curl -fsS -H "Authorization: Bearer ${PREDICTION_DESK_API_TOKEN}" \
-  "${API_BASE_URL}/api/v1/dataops/coverage"
-curl -fsS -H "Authorization: Bearer ${PREDICTION_DESK_API_TOKEN}" \
-  "${API_BASE_URL}/api/v1/dataops/gaps"
-```
-
-Coverage and gaps are operational evidence. They do not produce trade instructions or
-execution authority.
-
-## Backup Check
-
-Before public-read pilots or scheduled fixture jobs, confirm managed Postgres backups are
-enabled in the platform dashboard. Record the backup status in the deployment notes.
-
-## Manual Public-Read Pilot
-
-Public-read collection remains manual only. Run it only after all conditions are true:
-
-- Deployed staging API exists.
-- Managed Postgres is attached.
-- Migrations succeeded.
-- Fixture smoke passed.
-- Backups are confirmed, or the operator explicitly accepts the risk.
-- `CONFIRM_PUBLIC_READ_ONLY=true` is set.
-
-Command:
-
-```bash
-API_BASE_URL="https://your-staging-api.example.com" \
-PREDICTION_DESK_API_TOKEN="<token from platform secret>" \
-CONFIRM_PUBLIC_READ_ONLY=true \
-PUBLIC_READ_VENUES=kalshi \
-MAX_PAYLOADS=5 \
-scripts/staging_public_read_pilot.sh
-```
-
-The pilot sends no venue credentials and calls only DataOps `MANUAL_PUBLIC_FETCH` with
-`allow_network=true`.
-
-## Rollback
-
-1. Stop optional fixture cron jobs.
-2. Roll back the web service image/release.
-3. Keep Postgres intact.
-4. Restore from backup only if a migration or operator action corrupted staging data.
-
-## Prohibited In Staging
-
-- Live trading
-- Order placement or cancellation
-- Order routing
-- Authenticated venue trading endpoints
-- Venue credentials
-- Wallets or private keys
-- Real account IDs or real positions
-- Public-read scheduled collection
-- MiroFish runtime execution
-- LLM calls
+`deploy/render.yaml` remains in the repo as a legacy template, but Azure is now the active
+staging target.

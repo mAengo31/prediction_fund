@@ -189,7 +189,7 @@ Common API failures use this envelope:
 
 ## Staging DataOps Validation
 
-Use `scripts/staging_smoke.sh` against a token-protected staging API to validate health,
+Use `scripts/azure_staging_smoke.sh` against a token-protected Azure staging API to validate health,
 readiness, market readback, DataOps defaults, fixture collection, coverage, and gaps. Set
 `API_BASE_URL`; set `PREDICTION_DESK_API_TOKEN` when auth is enabled. The script adds the
 bearer header without printing the token.
@@ -202,7 +202,7 @@ with `allow_network=true`, then reads the collection run, coverage, and gaps.
 For staging database migration and read-only count verification, use:
 
 ```bash
-DATABASE_URL="postgresql+psycopg://..." scripts/staging_migrate_and_verify.sh
+DATABASE_URL="postgresql+psycopg://..." scripts/azure_migrate_and_verify.sh
 ```
 
 ## Local Examples

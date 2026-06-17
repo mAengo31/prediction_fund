@@ -25,45 +25,54 @@ Or run the deterministic smoke path:
 scripts/smoke_docker.sh
 ```
 
-## Staging Render-Style Deployment
+## Azure Staging Deployment
 
-`deploy/render.yaml` is a template for a low-friction staging deployment:
+Azure is the current staging target:
 
-- Web service runs the Docker image.
-- Managed Postgres is referenced through `DATABASE_URL`.
-- `PREDICTION_DESK_API_TOKEN` is marked as a secret placeholder.
-- `REQUIRE_API_TOKEN=true`.
-- `ENABLE_OPENAPI_DOCS=false`.
-- Public-read collection is not scheduled.
-- The optional fixture-only cron template is commented until an operator enables it.
+- Azure Container Apps for the FastAPI API.
+- Azure Database for PostgreSQL Flexible Server for persistent staging data.
+- Azure Container Registry for the Docker image.
+- Azure Container Apps Jobs for optional fixture-only DataOps validation.
+- Azure Container Apps secrets for immediate staging secrets.
 
-Run migrations as an explicit release/manual command:
+Use:
+
+- [azure/main.bicep](azure/main.bicep)
+- [azure/parameters.staging.json.example](azure/parameters.staging.json.example)
+- [azure/staging.env.example](azure/staging.env.example)
+- [azure/commands.md](azure/commands.md)
+
+Deploy only with explicit confirmation:
 
 ```bash
-DATABASE_URL="postgresql+psycopg://..." scripts/staging_migrate_and_verify.sh
+CONFIRM_AZURE_STAGING_DEPLOY=true scripts/azure_deploy_staging.sh
 ```
 
-Run fixture staging smoke after deployment:
+Run migrations and fixture smoke:
 
 ```bash
-API_BASE_URL="https://your-staging-api.example.com" \
-PREDICTION_DESK_API_TOKEN="..." \
-scripts/staging_smoke.sh
+DATABASE_URL="postgresql+psycopg://..." scripts/azure_migrate_and_verify.sh
+API_BASE_URL="https://<container-app-fqdn>" scripts/azure_staging_smoke.sh
 ```
 
-The safe scheduled validation command, if later enabled, is:
+The safe optional fixture validation job command is:
 
 ```bash
 prediction-desk dataops-cycle --mode FIXTURE
 ```
 
-Do not configure venue credentials in staging for this project stage. Do not schedule
-public-read collection. Public-read pilot remains manual and requires
-`CONFIRM_PUBLIC_READ_ONLY=true`.
+Do not configure venue credentials in staging. Do not schedule public-read collection.
+Public-read pilot remains manual and requires `CONFIRM_PUBLIC_READ_ONLY=true`.
 
-See [../docs/staging_deployment.md](../docs/staging_deployment.md) and
+See [../docs/azure_staging.md](../docs/azure_staging.md),
+[../docs/staging_deployment.md](../docs/staging_deployment.md), and
 [../docs/staging_dataops_pilot.md](../docs/staging_dataops_pilot.md) for the operator
 runbooks.
+
+## Legacy Render Template
+
+`deploy/render.yaml` remains only as a legacy safe template. Azure is the active staging
+target. Do not use the Render template unless the staging target changes again.
 
 If the Render CLI is authenticated, validate the blueprint before applying it:
 

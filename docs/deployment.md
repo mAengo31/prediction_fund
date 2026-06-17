@@ -134,9 +134,13 @@ job starts a service container, runs Alembic against Postgres, and then runs tes
 
 ## C. Staging Deployment Target
 
-Use a containerized deployment for staging. Render is acceptable for low-friction staging.
-Fly.io is acceptable for app runtime, but prefer managed Postgres elsewhere unless you are
-deliberately choosing unmanaged Postgres.
+Use Microsoft Azure for staging:
+
+- Azure Container Apps for the FastAPI API.
+- Azure Database for PostgreSQL Flexible Server for persistent staging data.
+- Azure Container Registry for the Docker image.
+- Azure Container Apps Jobs for optional fixture-only DataOps validation.
+- Azure Container Apps secrets for immediate staging secrets.
 
 Staging settings:
 
@@ -147,26 +151,32 @@ Staging settings:
 - Set `DATABASE_URL` to a managed Postgres connection string.
 - Set `GIT_COMMIT` during image build or release.
 
-Use the safe template in [../deploy/render.yaml](../deploy/render.yaml) as a starting point.
-It contains placeholders only; configure secrets in the hosting platform.
-The Render-style Docker command is:
+Use the Azure deployment packet in [../deploy/azure](../deploy/azure). It contains
+placeholders only; configure secrets in Azure, GitHub Actions secrets, or the operator shell.
+The Container Apps command is:
 
 ```bash
-uvicorn prediction_desk.api.app:create_app --factory --host 0.0.0.0 --port "$PORT"
+uvicorn prediction_desk.api.app:create_app --factory --host 0.0.0.0 --port 8000
+```
+
+Deploy only with explicit confirmation:
+
+```bash
+CONFIRM_AZURE_STAGING_DEPLOY=true scripts/azure_deploy_staging.sh
 ```
 
 Run migrations against staging before smoke:
 
 ```bash
-DATABASE_URL="postgresql+psycopg://..." scripts/staging_migrate_and_verify.sh
+DATABASE_URL="postgresql+psycopg://..." scripts/azure_migrate_and_verify.sh
 ```
 
-Run fixture-only staging smoke without printing secrets:
+Run fixture-only Azure staging smoke without printing secrets:
 
 ```bash
 API_BASE_URL="https://your-staging-api.example.com" \
 PREDICTION_DESK_API_TOKEN="..." \
-scripts/staging_smoke.sh
+scripts/azure_staging_smoke.sh
 ```
 
 Run the tiny public-read pilot only after explicit approval:
@@ -183,12 +193,13 @@ scripts/staging_public_read_pilot.sh
 Inspect staging counts without mutating state:
 
 ```bash
-DATABASE_URL="postgresql+psycopg://..." python scripts/inspect_db_counts.py
+DATABASE_URL="postgresql+psycopg://..." scripts/azure_inspect_counts.sh
 ```
 
-Use managed Postgres with backups enabled before public-read pilots. The pilot script sends
-no venue credentials and refuses to run unless `CONFIRM_PUBLIC_READ_ONLY=true`. See
-[staging_deployment.md](staging_deployment.md) and
+Use PostgreSQL Flexible Server backups and Azure Cost Management budgets before public-read
+pilots. The pilot script sends no venue credentials and refuses to run unless
+`CONFIRM_PUBLIC_READ_ONLY=true`. See [azure_staging.md](azure_staging.md),
+[staging_deployment.md](staging_deployment.md), and
 [staging_dataops_pilot.md](staging_dataops_pilot.md) for the full operational runbooks.
 
 If a scheduled validation job is enabled later, use fixture mode only:

@@ -1,0 +1,59 @@
+name: Azure Staging Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_deploy:
+        description: "Type true to create/update Azure staging resources"
+        required: true
+        default: "false"
+      image_tag:
+        description: "Image tag to build and deploy"
+        required: false
+        default: ""
+      deploy_fixture_dataops_job:
+        description: "Create/update optional fixture-only DataOps schedule"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.confirm_deploy == 'true' }}
+    env:
+      AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+      AZURE_LOCATION: ${{ secrets.AZURE_LOCATION }}
+      AZURE_CONTAINER_REGISTRY: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
+      AZURE_CONTAINER_APP_NAME: ${{ secrets.AZURE_CONTAINER_APP_NAME }}
+      AZURE_POSTGRES_SERVER_NAME: ${{ secrets.AZURE_POSTGRES_SERVER_NAME }}
+      AZURE_POSTGRES_ADMIN_PASSWORD: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
+      PREDICTION_DESK_API_TOKEN: ${{ secrets.PREDICTION_DESK_API_TOKEN }}
+      IMAGE_NAME: prediction-desk
+      IMAGE_TAG: ${{ github.event.inputs.image_tag || github.sha }}
+      APP_VERSION: ${{ github.event.inputs.image_tag || github.sha }}
+      GIT_COMMIT: ${{ github.sha }}
+      DEPLOY_FIXTURE_DATAOPS_JOB: ${{ github.event.inputs.deploy_fixture_dataops_job }}
+      CONFIRM_AZURE_STAGING_DEPLOY: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Azure staging
+        run: scripts/azure_deploy_staging.sh
+
+      - name: Show next manual steps
+        run: |
+          echo "Deployment workflow completed."
+          echo "Next: run migrations with scripts/azure_migrate_and_verify.sh from a secure operator shell."
+          echo "Then run fixture smoke with scripts/azure_staging_smoke.sh."

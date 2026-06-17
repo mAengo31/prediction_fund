@@ -4,6 +4,7 @@
 .mypy_cache/
 .pytest_cache/
 .venv/
+.env*.local
 __pycache__/
 *.py[cod]
 *.egg-info/

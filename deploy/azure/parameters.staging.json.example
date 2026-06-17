@@ -1,0 +1,78 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "centralus"
+    },
+    "namePrefix": {
+      "value": "prediction-desk-staging"
+    },
+    "acrName": {
+      "value": "predictiondesk3bbbab44cusacr"
+    },
+    "imageName": {
+      "value": "prediction-desk"
+    },
+    "imageTag": {
+      "value": "latest"
+    },
+    "deployContainerApp": {
+      "value": false
+    },
+    "deployFixtureDataOpsJob": {
+      "value": false
+    },
+    "containerAppName": {
+      "value": "prediction-desk-staging-api"
+    },
+    "postgresServerName": {
+      "value": "prediction-desk-staging-pg-cus-3bbbab"
+    },
+    "postgresDatabaseName": {
+      "value": "prediction_desk"
+    },
+    "postgresAdminUser": {
+      "value": "predictiondeskadmin"
+    },
+    "postgresAdminPassword": {
+      "value": "<set-securely-at-deploy-time-do-not-commit-real-value>"
+    },
+    "databaseUrlOverride": {
+      "value": ""
+    },
+    "predictionDeskApiToken": {
+      "value": "<set-securely-at-deploy-time-do-not-commit-real-value>"
+    },
+    "postgresVersion": {
+      "value": "16"
+    },
+    "postgresSkuName": {
+      "value": "Standard_B1ms"
+    },
+    "postgresSkuTier": {
+      "value": "Burstable"
+    },
+    "postgresStorageSizeGB": {
+      "value": 32
+    },
+    "postgresBackupRetentionDays": {
+      "value": 7
+    },
+    "enableAzureServicesPostgresFirewall": {
+      "value": true
+    },
+    "minReplicas": {
+      "value": 0
+    },
+    "maxReplicas": {
+      "value": 1
+    },
+    "appVersion": {
+      "value": "<git-sha-or-release-tag>"
+    },
+    "gitCommit": {
+      "value": "<git-sha>"
+    }
+  }
+}

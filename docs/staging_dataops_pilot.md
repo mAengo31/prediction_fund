@@ -52,8 +52,19 @@ For hosted staging, set:
 
 Enable automated database backups before running collection pilots.
 
-See [staging_deployment.md](staging_deployment.md) for the Render-style deployment
-blueprint and first-deploy sequence.
+See [azure_staging.md](azure_staging.md) and
+[staging_deployment.md](staging_deployment.md) for the Azure deployment blueprint and
+first-deploy sequence.
+
+Current Azure staging uses:
+
+- Resource group: `prediction-desk-staging-cus-rg`
+- Region: `centralus`
+- API: `https://prediction-desk-staging-api.bluebush-22f9863f.centralus.azurecontainerapps.io`
+
+Fixture smoke has passed against this endpoint. Public-read pilot remains held until an
+Azure budget alert is configured or the operator explicitly accepts the cost risk, backup
+posture is confirmed, and `CONFIRM_PUBLIC_READ_ONLY=true` is set.
 
 ## Fixture Staging Smoke
 
@@ -62,7 +73,7 @@ Fixture smoke does not call public venue endpoints:
 ```bash
 API_BASE_URL="https://your-staging-api.example.com" \
 PREDICTION_DESK_API_TOKEN="..." \
-scripts/staging_smoke.sh
+scripts/azure_staging_smoke.sh
 ```
 
 The script calls health/readiness, market listing, DataOps defaults, universes, collection
@@ -106,7 +117,7 @@ counts, including raw payloads, collection runs, coverage reports, and data gaps
 For migration plus counts in one operator-safe step:
 
 ```bash
-DATABASE_URL="postgresql+psycopg://..." scripts/staging_migrate_and_verify.sh
+DATABASE_URL="postgresql+psycopg://..." scripts/azure_migrate_and_verify.sh
 ```
 
 The helper hides the database URL and does not mutate state beyond Alembic migrations.
@@ -164,6 +175,9 @@ absence of `--allow-network` keeps the cycle network-free.
 Only after fixture coverage/gaps look sane, schedule tiny public-read jobs with explicit
 operator approval. Keep early runs low-frequency with small `max_payloads`; increase scope
 only after collection runs, coverage, and gaps remain explainable.
+
+Do not schedule public-read collection from the current staging state. The next safe
+automation step is fixture-only scheduling after budget and backup review.
 
 ## Still Prohibited
 

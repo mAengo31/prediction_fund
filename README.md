@@ -358,11 +358,10 @@ curl -X POST \
 
 Authentication is controlled by `REQUIRE_API_TOKEN` and `PREDICTION_DESK_API_TOKEN`.
 `/healthz` is always public. In staging and production, set `REQUIRE_API_TOKEN=true`.
-Use `scripts/staging_smoke.sh` for fixture-only staging validation and
-`scripts/staging_public_read_pilot.sh` only after explicitly setting
-`CONFIRM_PUBLIC_READ_ONLY=true`.
-Use `scripts/staging_migrate_and_verify.sh` to run staging migrations without printing the
-database URL.
+Azure staging uses `scripts/azure_staging_smoke.sh`,
+`scripts/azure_migrate_and_verify.sh`, and `scripts/azure_inspect_counts.sh`. The
+public-read pilot remains manual and requires `CONFIRM_PUBLIC_READ_ONLY=true` before
+`scripts/staging_public_read_pilot.sh` will run.
 
 See [docs/api.md](docs/api.md) for endpoint details and
 [docs/resolution_corpus.md](docs/resolution_corpus.md) for rule-analysis details. See
@@ -383,8 +382,9 @@ scenario features and research/replay metadata. See [docs/data_scaling.md](docs/
 for market universes, collection plans, backfill jobs, coverage reports, and gap detection.
 See [docs/staging_dataops_pilot.md](docs/staging_dataops_pilot.md) for staging smoke,
 public-read pilot, database inspection, coverage/gap readback, and rollback guidance. See
-[docs/staging_deployment.md](docs/staging_deployment.md) for the Render-style staging
-deployment packet.
+[docs/azure_staging.md](docs/azure_staging.md) and
+[docs/staging_deployment.md](docs/staging_deployment.md) for the Azure staging deployment
+packet.
 
 ## Docker Compose Quickstart
 
