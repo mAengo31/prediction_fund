@@ -92,7 +92,16 @@ def _run_collection_once(
         resolved_venue_names = ["kalshi", "polymarket"]
     resolved_market_ids = _resolve_market_ids(repo, universe_id, market_ids, asof)
     resolved_endpoint_types = list(endpoint_types or (plan.endpoint_types if plan else []))
-    payload_limit = max_payloads or (plan.max_payloads_per_run if plan else 100)
+    if normalized_mode == CollectionRunMode.MANUAL_PUBLIC_FETCH and not resolved_endpoint_types:
+        resolved_endpoint_types = ["MARKET_LIST"]
+    if max_payloads is not None:
+        payload_limit = max_payloads
+    elif plan is not None:
+        payload_limit = plan.max_payloads_per_run
+    elif normalized_mode == CollectionRunMode.MANUAL_PUBLIC_FETCH:
+        payload_limit = 5
+    else:
+        payload_limit = 100
     created_at = datetime.now(tz=UTC)
     run = CollectionRun(
         collection_run_id=dataops_object_id(
@@ -134,11 +143,14 @@ def _run_collection_once(
     for venue_name in run.venue_names:
         if counters["payloads_archived"] >= payload_limit:
             break
+        remaining_payloads = max(0, payload_limit - counters["payloads_archived"])
         try:
             result = run_ingestion_once(
                 venue_name=venue_name,
                 mode=ingestion_mode,
-                limit=payload_limit,
+                limit=remaining_payloads,
+                market_ids=resolved_market_ids or None,
+                endpoint_types=resolved_endpoint_types or None,
                 allow_network=allow_network,
                 analyze_rules=plan.analyze_rules if plan else True,
                 recompute_verdicts=plan.recompute_verdicts if plan else True,
@@ -157,6 +169,15 @@ def _run_collection_once(
             counters["price_snapshots_created"] += ingestion_run.price_snapshots_created
             counters["liquidity_snapshots_created"] += ingestion_run.liquidity_snapshots_created
             counters["quality_reports_created"] += ingestion_run.quality_reports_created
+            for ingestion_error in result.ingestion.errors:
+                errors.append(
+                    {
+                        "venue_name": venue_name,
+                        "code": ingestion_error.error_code,
+                        "endpoint_type": ingestion_error.endpoint_type or "",
+                        "external_id": ingestion_error.external_id or "",
+                    }
+                )
         except IngestionServiceError as exc:
             errors.append({"venue_name": venue_name, "code": exc.code})
     completed = run.model_copy(

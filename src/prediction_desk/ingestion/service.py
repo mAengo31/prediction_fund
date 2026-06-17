@@ -23,6 +23,7 @@ from prediction_desk.ingestion.models import (
     IngestionRunResult,
     NormalizedVenuePayload,
     RawVenuePayload,
+    VenueMarketMapping,
 )
 from prediction_desk.ingestion.normalizers.kalshi import normalize_kalshi_payload
 from prediction_desk.ingestion.normalizers.polymarket import normalize_polymarket_payload
@@ -117,6 +118,52 @@ def ingest_public_market_sample(
         )
 
 
+def ingest_public_endpoint_payloads(
+    *,
+    venue_name: str,
+    endpoint_types: list[str] | None = None,
+    market_ids: list[str] | None = None,
+    limit: int = 10,
+    allow_network: bool = False,
+    analyze_rules: bool = True,
+    recompute_verdicts: bool = True,
+    derive_market_data: bool = True,
+    repo: PredictionMarketRepository | None = None,
+    database_url: str | None = None,
+) -> IngestionRunResult:
+    if not allow_network:
+        raise IngestionServiceError(
+            "public_network_disabled",
+            "Targeted public ingestion requires allow_network=true and remains read-only.",
+        )
+    if repo is not None:
+        return _ingest_public_endpoint_payloads(
+            repo=repo,
+            venue_name=venue_name,
+            endpoint_types=endpoint_types,
+            market_ids=market_ids,
+            limit=limit,
+            allow_network=allow_network,
+            analyze_rules=analyze_rules,
+            recompute_verdicts=recompute_verdicts,
+            derive_market_data=derive_market_data,
+        )
+    with session_scope(database_url) as session:
+        from prediction_desk.persistence.repositories import PredictionMarketRepository
+
+        return _ingest_public_endpoint_payloads(
+            repo=PredictionMarketRepository(session),
+            venue_name=venue_name,
+            endpoint_types=endpoint_types,
+            market_ids=market_ids,
+            limit=limit,
+            allow_network=allow_network,
+            analyze_rules=analyze_rules,
+            recompute_verdicts=recompute_verdicts,
+            derive_market_data=derive_market_data,
+        )
+
+
 class IngestionService:
     def __init__(self, repo: PredictionMarketRepository) -> None:
         self.repo = repo
@@ -153,6 +200,30 @@ class IngestionService:
     ) -> IngestionRunResult:
         return ingest_public_market_sample(
             venue_name=venue_name,
+            limit=limit,
+            allow_network=allow_network,
+            analyze_rules=analyze_rules,
+            recompute_verdicts=recompute_verdicts,
+            derive_market_data=derive_market_data,
+            repo=self.repo,
+        )
+
+    def ingest_public_endpoint_payloads(
+        self,
+        *,
+        venue_name: str,
+        endpoint_types: list[str] | None = None,
+        market_ids: list[str] | None = None,
+        limit: int = 10,
+        allow_network: bool = False,
+        analyze_rules: bool = True,
+        recompute_verdicts: bool = True,
+        derive_market_data: bool = True,
+    ) -> IngestionRunResult:
+        return ingest_public_endpoint_payloads(
+            venue_name=venue_name,
+            endpoint_types=endpoint_types,
+            market_ids=market_ids,
             limit=limit,
             allow_network=allow_network,
             analyze_rules=analyze_rules,
@@ -221,8 +292,40 @@ def _ingest_public_market_sample(
     recompute_verdicts: bool,
     derive_market_data: bool,
 ) -> IngestionRunResult:
+    return _ingest_public_endpoint_payloads(
+        repo=repo,
+        venue_name=venue_name,
+        endpoint_types=[VenueEndpointType.MARKET_LIST.value],
+        market_ids=None,
+        limit=limit,
+        allow_network=allow_network,
+        analyze_rules=analyze_rules,
+        recompute_verdicts=recompute_verdicts,
+        derive_market_data=derive_market_data,
+    )
+
+
+def _ingest_public_endpoint_payloads(
+    *,
+    repo: PredictionMarketRepository,
+    venue_name: str,
+    endpoint_types: list[str] | None,
+    market_ids: list[str] | None,
+    limit: int,
+    allow_network: bool,
+    analyze_rules: bool,
+    recompute_verdicts: bool,
+    derive_market_data: bool,
+) -> IngestionRunResult:
     adapter = _fixture_adapter(venue_name, fixture_dir=None)
-    payloads = adapter.fetch_market_catalog(limit=limit, allow_network=allow_network)
+    payloads, pre_errors = _collect_public_payloads(
+        repo=repo,
+        adapter=adapter,
+        endpoint_types=endpoint_types,
+        market_ids=market_ids,
+        limit=limit,
+        allow_network=allow_network,
+    )
     return _ingest_payloads(
         repo=repo,
         venue_id=adapter.venue_id,
@@ -233,7 +336,106 @@ def _ingest_public_market_sample(
         analyze_rules=analyze_rules,
         recompute_verdicts=recompute_verdicts,
         derive_market_data=derive_market_data,
+        pre_errors=pre_errors,
     )
+
+
+def _collect_public_payloads(
+    *,
+    repo: PredictionMarketRepository,
+    adapter: KalshiReadOnlyAdapter | PolymarketReadOnlyAdapter,
+    endpoint_types: list[str] | None,
+    market_ids: list[str] | None,
+    limit: int,
+    allow_network: bool,
+) -> tuple[list[RawVenuePayload], list[dict[str, str | None]]]:
+    requested_endpoint_types = _public_endpoint_types(endpoint_types)
+    payloads: list[RawVenuePayload] = []
+    errors: list[dict[str, str | None]] = []
+    remaining = max(0, limit)
+    mappings_cache: list[VenueMarketMapping] | None = None
+
+    for endpoint_type in requested_endpoint_types:
+        if remaining <= 0:
+            break
+        if endpoint_type == VenueEndpointType.MARKET_LIST:
+            try:
+                fetched = adapter.fetch_market_catalog(
+                    limit=remaining,
+                    allow_network=allow_network,
+                )
+            except Exception as exc:
+                errors.append(
+                    _fetch_error(
+                        code="public_fetch_failed",
+                        endpoint_type=endpoint_type,
+                        external_id=None,
+                        exc=exc,
+                    )
+                )
+                continue
+            payloads.extend(fetched[:remaining])
+            remaining -= min(len(fetched), remaining)
+            continue
+
+        if not _targeted_endpoint_supported(adapter, endpoint_type):
+            errors.append(
+                {
+                    "code": "unsupported_public_endpoint",
+                    "endpoint_type": endpoint_type.value,
+                    "external_id": None,
+                    "message": (
+                        f"{adapter.venue_name} targeted {endpoint_type.value} "
+                        "is not supported by the current read-only normalizer path."
+                    ),
+                }
+            )
+            continue
+
+        if mappings_cache is None:
+            mappings_cache = _target_mappings(
+                repo=repo,
+                venue_name=adapter.venue_name,
+                market_ids=market_ids,
+                limit=limit,
+            )
+        if not mappings_cache:
+            errors.append(
+                {
+                    "code": "missing_venue_mapping",
+                    "endpoint_type": endpoint_type.value,
+                    "external_id": None,
+                    "message": (
+                        f"No existing {adapter.venue_name} venue mappings were available "
+                        "for targeted public follow-up."
+                    ),
+                }
+            )
+            continue
+
+        for mapping in mappings_cache:
+            if remaining <= 0:
+                break
+            try:
+                payloads.append(
+                    _fetch_targeted_payload(
+                        adapter=adapter,
+                        endpoint_type=endpoint_type,
+                        external_market_id=mapping.external_market_id,
+                        allow_network=allow_network,
+                    )
+                )
+                remaining -= 1
+            except Exception as exc:
+                errors.append(
+                    _fetch_error(
+                        code="public_fetch_failed",
+                        endpoint_type=endpoint_type,
+                        external_id=mapping.external_market_id,
+                        exc=exc,
+                    )
+                )
+    return payloads, errors
 
 
 def _ingest_payloads(
@@ -247,6 +449,7 @@ def _ingest_payloads(
     analyze_rules: bool,
     recompute_verdicts: bool,
     derive_market_data: bool,
+    pre_errors: list[dict[str, str | None]] | None = None,
 ) -> IngestionRunResult:
     started_at = datetime.now(tz=UTC)
     run = IngestionRun(
@@ -264,6 +467,11 @@ def _ingest_payloads(
     repo.save_ingestion_run(run)
     errors: list[IngestionError] = []
     seen_markets: set[str] = set()
+
+    for pre_error in pre_errors or []:
+        error = _record_pre_error(repo, run, pre_error)
+        errors.append(error)
+        run.errors_count += 1
 
     for payload in payloads:
         try:
@@ -306,6 +514,109 @@ def _ingest_payloads(
     )
     repo.update_ingestion_run(run)
     return IngestionRunResult(run=run, errors=errors)
+
+
+def _public_endpoint_types(endpoint_types: list[str] | None) -> list[VenueEndpointType]:
+    if not endpoint_types:
+        return [VenueEndpointType.MARKET_LIST]
+    allowed = {
+        VenueEndpointType.MARKET_LIST,
+        VenueEndpointType.MARKET_DETAIL,
+        VenueEndpointType.ORDERBOOK,
+        VenueEndpointType.PRICE_HISTORY,
+    }
+    resolved: list[VenueEndpointType] = []
+    seen: set[VenueEndpointType] = set()
+    for value in endpoint_types:
+        try:
+            endpoint_type = VenueEndpointType(str(value).upper())
+        except ValueError as exc:
+            raise IngestionServiceError(
+                "unsupported_public_endpoint",
+                f"Unsupported public endpoint type: {value}",
+            ) from exc
+        if endpoint_type not in allowed:
+            raise IngestionServiceError(
+                "unsupported_public_endpoint",
+                f"Unsupported public endpoint type: {endpoint_type.value}",
+            )
+        if endpoint_type not in seen:
+            seen.add(endpoint_type)
+            resolved.append(endpoint_type)
+    return resolved
+
+
+def _targeted_endpoint_supported(
+    adapter: KalshiReadOnlyAdapter | PolymarketReadOnlyAdapter,
+    endpoint_type: VenueEndpointType,
+) -> bool:
+    if endpoint_type == VenueEndpointType.MARKET_DETAIL:
+        return True
+    if endpoint_type == VenueEndpointType.ORDERBOOK:
+        return adapter.venue_id == "kalshi"
+    if endpoint_type == VenueEndpointType.PRICE_HISTORY:
+        return adapter.venue_id == "polymarket"
+    return endpoint_type == VenueEndpointType.MARKET_LIST
+
+
+def _target_mappings(
+    *,
+    repo: PredictionMarketRepository,
+    venue_name: str,
+    market_ids: list[str] | None,
+    limit: int,
+) -> list[VenueMarketMapping]:
+    if market_ids:
+        mappings = [
+            mapping
+            for market_id in sorted(set(market_ids))
+            if (mapping := repo.get_mapping_by_canonical_market_id(market_id)) is not None
+            and mapping.venue_name.casefold() == venue_name.casefold()
+        ]
+        return sorted(mappings, key=lambda item: (item.external_market_id, item.mapping_id))
+    mappings = repo.list_venue_market_mappings(venue_name=venue_name, limit=max(1, limit))
+    return sorted(mappings, key=lambda item: (item.external_market_id, item.mapping_id))
+
+
+def _fetch_targeted_payload(
+    *,
+    adapter: KalshiReadOnlyAdapter | PolymarketReadOnlyAdapter,
+    endpoint_type: VenueEndpointType,
+    external_market_id: str,
+    allow_network: bool,
+) -> RawVenuePayload:
+    if endpoint_type == VenueEndpointType.MARKET_DETAIL:
+        return adapter.fetch_market_detail(
+            external_market_id,
+            allow_network=allow_network,
+        )
+    if endpoint_type == VenueEndpointType.ORDERBOOK:
+        return adapter.fetch_orderbook(
+            external_market_id,
+            allow_network=allow_network,
+        )
+    if endpoint_type == VenueEndpointType.PRICE_HISTORY:
+        return adapter.fetch_price_history(
+            external_market_id,
+            allow_network=allow_network,
+        )
+    raise IngestionServiceError("unsupported_public_endpoint")
+
+
+def _fetch_error(
+    *,
+    code: str,
+    endpoint_type: VenueEndpointType,
+    external_id: str | None,
+    exc: Exception,
+) -> dict[str, str | None]:
+    return {
+        "code": code,
+        "endpoint_type": endpoint_type.value,
+        "external_id": external_id,
+        "message": str(exc),
+        "exception_type": type(exc).__name__,
+    }
 
 
 def _upsert_normalized(
@@ -454,6 +765,33 @@ def _record_error(
         error_message=str(exc),
         payload_id=payload.payload_id,
         metadata={"exception_type": type(exc).__name__},
+    )
+    repo.save_ingestion_error(error)
+    return error
+
+
+def _record_pre_error(
+    repo: PredictionMarketRepository,
+    run: IngestionRun,
+    pre_error: dict[str, str | None],
+) -> IngestionError:
+    error = IngestionError(
+        error_id=f"ingestion_error_{uuid4().hex[:24]}",
+        ingestion_run_id=run.ingestion_run_id,
+        venue_id=run.venue_id,
+        external_id=pre_error.get("external_id"),
+        endpoint_type=pre_error.get("endpoint_type"),
+        occurred_at=datetime.now(tz=UTC),
+        error_code=str(pre_error.get("code") or "public_fetch_error"),
+        error_message=str(
+            pre_error.get("message") or pre_error.get("code") or "public_fetch_error"
+        ),
+        payload_id=None,
+        metadata={
+            key: value
+            for key, value in pre_error.items()
+            if key not in {"code", "message", "external_id", "endpoint_type"}
+        },
     )
     repo.save_ingestion_error(error)
     return error

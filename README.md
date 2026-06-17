@@ -296,6 +296,21 @@ prediction-desk dataops-run-collection \
   --max-payloads 5
 ```
 
+Target an existing public-read market for detail and orderbook follow-up:
+
+```bash
+prediction-desk dataops-run-collection \
+  --venue kalshi \
+  --mode MANUAL_PUBLIC_FETCH \
+  --allow-network \
+  --endpoint-type MARKET_DETAIL \
+  --endpoint-type ORDERBOOK \
+  --market-id kalshi_market_... \
+  --max-payloads 5
+```
+
+Public-read collection remains manual and unscheduled. No venue credentials are accepted.
+
 Use a custom database URL:
 
 ```bash

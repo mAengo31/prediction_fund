@@ -98,6 +98,24 @@ The script sends no venue credentials. It calls only the DataOps collection endp
 `MANUAL_PUBLIC_FETCH` mode with `allow_network=true`, then reads back the collection run,
 computes coverage, detects gaps, and prints compact counts.
 
+If the first catalog/list pilot discovers markets and creates sparse coverage gaps, run
+targeted follow-up manually with explicit endpoint types and market IDs:
+
+```bash
+API_BASE_URL="https://your-staging-api.example.com" \
+PREDICTION_DESK_API_TOKEN="..." \
+CONFIRM_PUBLIC_READ_ONLY=true \
+PUBLIC_READ_VENUES=kalshi \
+PUBLIC_READ_ENDPOINT_TYPES=MARKET_DETAIL,ORDERBOOK \
+PUBLIC_READ_MARKET_IDS=kalshi_market_... \
+MAX_PAYLOADS=5 \
+scripts/staging_public_read_pilot.sh
+```
+
+The targeted shape still calls only the existing DataOps collection endpoint. It does not
+schedule collection and does not pass venue credentials. Keep `MAX_PAYLOADS` tiny while
+validating coverage/gap changes.
+
 If public fetch is unsupported or unavailable, keep fixture staging as the validated path
 and record the failure mode in validation notes.
 

@@ -18,6 +18,8 @@ fi
 
 API_BASE_URL="${API_BASE_URL%/}"
 PUBLIC_READ_VENUES="${PUBLIC_READ_VENUES:-kalshi}"
+PUBLIC_READ_ENDPOINT_TYPES="${PUBLIC_READ_ENDPOINT_TYPES:-}"
+PUBLIC_READ_MARKET_IDS="${PUBLIC_READ_MARKET_IDS:-}"
 MAX_PAYLOADS="${MAX_PAYLOADS:-5}"
 
 if ! [[ "${MAX_PAYLOADS}" =~ ^[0-9]+$ ]] || (( MAX_PAYLOADS < 1 || MAX_PAYLOADS > 10 )); then
@@ -54,25 +56,40 @@ request_json() {
 }
 
 collection_payload="$(
-  PUBLIC_READ_VENUES="${PUBLIC_READ_VENUES}" MAX_PAYLOADS="${MAX_PAYLOADS}" python - <<'PY'
+  PUBLIC_READ_VENUES="${PUBLIC_READ_VENUES}" \
+  PUBLIC_READ_ENDPOINT_TYPES="${PUBLIC_READ_ENDPOINT_TYPES}" \
+  PUBLIC_READ_MARKET_IDS="${PUBLIC_READ_MARKET_IDS}" \
+  MAX_PAYLOADS="${MAX_PAYLOADS}" python - <<'PY'
 from __future__ import annotations
 
 import json
 import os
 
-venues = [item.strip() for item in os.environ["PUBLIC_READ_VENUES"].split(",") if item.strip()]
+def csv_env(name: str) -> list[str]:
+    return [item.strip() for item in os.environ.get(name, "").split(",") if item.strip()]
+
+
+venues = csv_env("PUBLIC_READ_VENUES")
 if not venues:
     raise SystemExit("PUBLIC_READ_VENUES resolved to an empty venue list")
 
+endpoint_types = csv_env("PUBLIC_READ_ENDPOINT_TYPES")
+market_ids = csv_env("PUBLIC_READ_MARKET_IDS")
+payload = {
+    "venue_names": venues,
+    "mode": "MANUAL_PUBLIC_FETCH",
+    "allow_network": True,
+    "max_payloads": int(os.environ["MAX_PAYLOADS"]),
+    "metadata": {"source": "staging_public_read_pilot"},
+}
+if endpoint_types:
+    payload["endpoint_types"] = endpoint_types
+if market_ids:
+    payload["market_ids"] = market_ids
+
 print(
     json.dumps(
-        {
-            "venue_names": venues,
-            "mode": "MANUAL_PUBLIC_FETCH",
-            "allow_network": True,
-            "max_payloads": int(os.environ["MAX_PAYLOADS"]),
-            "metadata": {"source": "staging_public_read_pilot"},
-        },
+        payload,
         separators=(",", ":"),
         sort_keys=True,
     )

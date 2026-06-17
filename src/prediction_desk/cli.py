@@ -3226,6 +3226,10 @@ def dataops_run_collection_command(
         list[str] | None,
         typer.Option("--market-id", help="Market ID; repeatable."),
     ] = None,
+    endpoint_type: Annotated[
+        list[str] | None,
+        typer.Option("--endpoint-type", help="Endpoint type; repeatable."),
+    ] = None,
     mode: Annotated[str, typer.Option("--mode", help="FIXTURE or MANUAL_PUBLIC_FETCH.")] = (
         CollectionRunMode.FIXTURE.value
     ),
@@ -3252,6 +3256,7 @@ def dataops_run_collection_command(
                 universe_id=universe_id,
                 venue_names=list(venue or []) or None,
                 market_ids=list(market_id or []) or None,
+                endpoint_types=list(endpoint_type or []) or None,
                 mode=mode,
                 allow_network=allow_network,
                 max_payloads=max_payloads,

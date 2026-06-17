@@ -26,6 +26,8 @@ class IngestionRunOnceRequest(IngestionSchedulerModel):
     venue_name: str
     mode: str = "fixture"
     limit: int = Field(default=10, ge=1, le=100)
+    market_ids: list[str] | None = None
+    endpoint_types: list[str] | None = None
     allow_network: bool = False
     analyze_rules: bool = True
     recompute_verdicts: bool = True
@@ -47,6 +49,8 @@ def run_ingestion_once(
     venue_name: str,
     mode: str = "fixture",
     limit: int = 10,
+    market_ids: list[str] | None = None,
+    endpoint_types: list[str] | None = None,
     allow_network: bool = False,
     analyze_rules: bool = True,
     recompute_verdicts: bool = True,
@@ -62,6 +66,8 @@ def run_ingestion_once(
             venue_name=venue_name,
             mode=mode,
             limit=limit,
+            market_ids=market_ids,
+            endpoint_types=endpoint_types,
             allow_network=allow_network,
             analyze_rules=analyze_rules,
             recompute_verdicts=recompute_verdicts,
@@ -77,6 +83,8 @@ def run_ingestion_once(
             venue_name=venue_name,
             mode=mode,
             limit=limit,
+            market_ids=market_ids,
+            endpoint_types=endpoint_types,
             allow_network=allow_network,
             analyze_rules=analyze_rules,
             recompute_verdicts=recompute_verdicts,
@@ -92,6 +100,8 @@ def _run_ingestion_once(
     venue_name: str,
     mode: str,
     limit: int,
+    market_ids: list[str] | None,
+    endpoint_types: list[str] | None,
     allow_network: bool,
     analyze_rules: bool,
     recompute_verdicts: bool,
@@ -111,8 +121,10 @@ def _run_ingestion_once(
     elif normalized_mode == "manual_public_fetch":
         if not allow_network:
             raise IngestionServiceError("public_network_disabled")
-        ingestion = service.ingest_public_market_sample(
+        ingestion = service.ingest_public_endpoint_payloads(
             venue_name=venue_name,
+            endpoint_types=endpoint_types,
+            market_ids=market_ids,
             limit=limit,
             allow_network=allow_network,
             analyze_rules=analyze_rules,

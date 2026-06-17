@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from pathlib import Path
+
 import pytest
 
 from prediction_desk.dataops.orchestrator import DataOpsCollectionError, run_collection_once
 from prediction_desk.dataops.plans import create_default_collection_plans_if_missing
+from prediction_desk.ingestion.adapters.kalshi import KalshiReadOnlyAdapter
+from prediction_desk.ingestion.enums import VenueMappingStatus
+from prediction_desk.ingestion.models import RawVenuePayload, VenueMarketMapping
 from prediction_desk.persistence.database import build_engine, build_session_factory, init_db
 from prediction_desk.persistence.repositories import PredictionMarketRepository
 
@@ -46,3 +52,213 @@ def test_manual_public_fetch_without_allow_network_fails_safely(tmp_path) -> Non
             )
 
     assert exc.value.code == "public_network_disabled"
+
+
+def test_manual_public_fetch_market_list_routes_with_no_external_network(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_kalshi_public_fetches(monkeypatch)
+    factory = _factory(tmp_path, "dataops_public_market_list.db")
+    with factory.begin() as session:
+        repo = PredictionMarketRepository(session)
+        result = run_collection_once(
+            venue_names=["kalshi"],
+            endpoint_types=["MARKET_LIST"],
+            mode="MANUAL_PUBLIC_FETCH",
+            allow_network=True,
+            max_payloads=1,
+            repo=repo,
+        )
+
+    assert result.run.status.value == "COMPLETED"
+    assert result.run.endpoint_types == ["MARKET_LIST"]
+    assert result.run.payloads_archived == 1
+    assert result.run.markets_processed == 1
+
+
+def test_manual_public_fetch_targeted_detail_and_orderbook_use_existing_mapping(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _patch_kalshi_public_fetches(monkeypatch)
+    factory = _factory(tmp_path, "dataops_public_targeted.db")
+    with factory.begin() as session:
+        repo = PredictionMarketRepository(session)
+        _save_kalshi_mapping(repo)
+        result = run_collection_once(
+            venue_names=["kalshi"],
+            market_ids=["kalshi_market_kxweather_nyc_rain_20260930"],
+            endpoint_types=["MARKET_DETAIL", "ORDERBOOK"],
+            mode="MANUAL_PUBLIC_FETCH",
+            allow_network=True,
+            max_payloads=5,
+            repo=repo,
+        )
+        orderbooks = repo.list_orderbook_snapshots(
+            "kalshi_market_kxweather_nyc_rain_20260930"
+        )
+        prices = repo.list_price_snapshots("kalshi_market_kxweather_nyc_rain_20260930")
+        liquidity = repo.list_liquidity_snapshots(
+            "kalshi_market_kxweather_nyc_rain_20260930"
+        )
+        rule_snapshot = repo.get_latest_rule_snapshot(
+            "kalshi_market_kxweather_nyc_rain_20260930"
+        )
+
+    assert result.run.status.value == "COMPLETED"
+    assert result.run.payloads_archived == 2
+    assert result.run.markets_processed == 1
+    assert result.run.price_snapshots_created == 1
+    assert result.run.liquidity_snapshots_created == 1
+    assert result.run.quality_reports_created >= 1
+    assert rule_snapshot is not None
+    assert orderbooks
+    assert prices
+    assert liquidity
+    assert calls == [
+        ("detail", "KXWEATHER-NYC-RAIN-20260930"),
+        ("orderbook", "KXWEATHER-NYC-RAIN-20260930"),
+    ]
+
+
+def test_manual_public_fetch_enforces_max_payloads_across_endpoint_types(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _patch_kalshi_public_fetches(monkeypatch)
+    factory = _factory(tmp_path, "dataops_public_max_payloads.db")
+    with factory.begin() as session:
+        repo = PredictionMarketRepository(session)
+        _save_kalshi_mapping(repo)
+        result = run_collection_once(
+            venue_names=["kalshi"],
+            market_ids=["kalshi_market_kxweather_nyc_rain_20260930"],
+            endpoint_types=["MARKET_DETAIL", "ORDERBOOK"],
+            mode="MANUAL_PUBLIC_FETCH",
+            allow_network=True,
+            max_payloads=1,
+            repo=repo,
+        )
+
+    assert result.run.status.value == "COMPLETED"
+    assert result.run.payloads_archived == 1
+    assert calls == [("detail", "KXWEATHER-NYC-RAIN-20260930")]
+
+
+def test_manual_public_fetch_unsupported_endpoint_records_safe_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_kalshi_public_fetches(monkeypatch)
+    factory = _factory(tmp_path, "dataops_public_unsupported.db")
+    with factory.begin() as session:
+        repo = PredictionMarketRepository(session)
+        _save_kalshi_mapping(repo)
+        result = run_collection_once(
+            venue_names=["kalshi"],
+            market_ids=["kalshi_market_kxweather_nyc_rain_20260930"],
+            endpoint_types=["PRICE_HISTORY"],
+            mode="MANUAL_PUBLIC_FETCH",
+            allow_network=True,
+            max_payloads=5,
+            repo=repo,
+        )
+        ingestion_run = repo.list_ingestion_runs(venue_name="Kalshi", limit=1)[0]
+        ingestion_errors = repo.list_ingestion_errors(ingestion_run.ingestion_run_id)
+
+    assert result.run.status.value == "PARTIAL"
+    assert result.run.payloads_archived == 0
+    assert result.run.errors_count == 1
+    assert result.run.metadata["errors"][0]["code"] == "unsupported_public_endpoint"
+    assert ingestion_errors[0].error_code == "unsupported_public_endpoint"
+
+
+def _factory(tmp_path: Path, filename: str):
+    database_url = f"sqlite:///{tmp_path / filename}"
+    init_db(database_url)
+    engine = build_engine(database_url)
+    return build_session_factory(engine)
+
+
+def _patch_kalshi_public_fetches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[tuple[str, str]]:
+    fixture_adapter = KalshiReadOnlyAdapter()
+    original_catalog = KalshiReadOnlyAdapter.fetch_market_catalog
+    original_detail = KalshiReadOnlyAdapter.fetch_market_detail
+    original_orderbook = KalshiReadOnlyAdapter.fetch_orderbook
+    calls: list[tuple[str, str]] = []
+
+    def fake_catalog(
+        self: KalshiReadOnlyAdapter,
+        *,
+        limit: int = 100,
+        allow_network: bool = False,
+        captured_at: datetime | None = None,
+    ) -> list[RawVenuePayload]:
+        assert allow_network is True
+        return original_catalog(
+            fixture_adapter,
+            limit=limit,
+            allow_network=False,
+            captured_at=captured_at,
+        )[:limit]
+
+    def fake_detail(
+        self: KalshiReadOnlyAdapter,
+        external_market_id: str,
+        *,
+        allow_network: bool = False,
+        captured_at: datetime | None = None,
+    ) -> RawVenuePayload:
+        assert allow_network is True
+        calls.append(("detail", external_market_id))
+        return original_detail(
+            fixture_adapter,
+            external_market_id,
+            allow_network=False,
+            captured_at=captured_at,
+        )
+
+    def fake_orderbook(
+        self: KalshiReadOnlyAdapter,
+        external_market_id: str,
+        *,
+        allow_network: bool = False,
+        captured_at: datetime | None = None,
+    ) -> RawVenuePayload:
+        assert allow_network is True
+        calls.append(("orderbook", external_market_id))
+        return original_orderbook(
+            fixture_adapter,
+            external_market_id,
+            allow_network=False,
+            captured_at=captured_at,
+        )
+
+    monkeypatch.setattr(KalshiReadOnlyAdapter, "fetch_market_catalog", fake_catalog)
+    monkeypatch.setattr(KalshiReadOnlyAdapter, "fetch_market_detail", fake_detail)
+    monkeypatch.setattr(KalshiReadOnlyAdapter, "fetch_orderbook", fake_orderbook)
+    return calls
+
+
+def _save_kalshi_mapping(repo: PredictionMarketRepository) -> None:
+    now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+    repo.upsert_venue_market_mapping(
+        VenueMarketMapping(
+            mapping_id="mapping_kalshi_kxweather_nyc_rain_20260930",
+            venue_id="kalshi",
+            venue_name="Kalshi",
+            external_event_id="KXWEATHER-NYC-RAIN",
+            external_market_id="KXWEATHER-NYC-RAIN-20260930",
+            external_symbol="KXWEATHER-NYC-RAIN-20260930",
+            canonical_event_id="kalshi_event_kxweather_nyc_rain",
+            canonical_market_id="kalshi_market_kxweather_nyc_rain_20260930",
+            external_url=None,
+            first_seen_at=now,
+            last_seen_at=now,
+            status=VenueMappingStatus.ACTIVE,
+            metadata={"test": True},
+        )
+    )

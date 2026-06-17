@@ -85,6 +85,14 @@ prediction-desk dataops-universes
 prediction-desk dataops-build-universe --universe-id market_universe_...
 prediction-desk dataops-collection-plans
 prediction-desk dataops-run-collection --venue kalshi --mode FIXTURE
+prediction-desk dataops-run-collection \
+  --venue kalshi \
+  --mode MANUAL_PUBLIC_FETCH \
+  --allow-network \
+  --endpoint-type MARKET_DETAIL \
+  --endpoint-type ORDERBOOK \
+  --market-id kalshi_market_kxweather_nyc_rain_20260930 \
+  --max-payloads 5
 prediction-desk dataops-backfill-create \
   --venue kalshi \
   --endpoint-type ORDERBOOK \
@@ -118,6 +126,11 @@ DataOps endpoints are under `/api/v1/dataops`:
 - `GET /dataops/coverage`
 - `POST /dataops/gaps/detect`
 - `GET /dataops/gaps`
+
+Manual public fetch defaults to `MARKET_LIST` when endpoint types are omitted. Targeted
+follow-up can request `MARKET_DETAIL`, `ORDERBOOK`, and supported `PRICE_HISTORY` payloads
+for existing canonical market IDs/venue mappings. Unsupported endpoint/venue combinations
+are recorded as safe partial-run errors; the system does not fabricate historical data.
 
 ## Scheduling
 

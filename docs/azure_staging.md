@@ -55,11 +55,28 @@ expected missing-data gaps: rule snapshots, orderbooks, price snapshots, and liq
 snapshots. This is expected for a market-list-only pilot and is a measurement outcome, not
 an execution signal.
 
-The current DataOps public-read path only calls the market catalog/list fetch. Although the
-Kalshi adapter has read-only methods for market detail, orderbook, and price history, the
-orchestrator does not yet target those endpoints in `MANUAL_PUBLIC_FETCH`. Hold additional
-catalog-only pilots unless the goal is repeated catalog idempotence; implement targeted
-read-only follow-up before trying to close the newly introduced coverage gaps.
+Catalog/list remains the default when no endpoint types are provided. Targeted manual
+follow-up is now available through `MANUAL_PUBLIC_FETCH` by passing existing canonical
+market IDs plus explicit endpoint types. Kalshi supports targeted `MARKET_DETAIL` and
+`ORDERBOOK` through the current normalizer path. Kalshi `PRICE_HISTORY` is recorded as
+unsupported in v1 instead of fabricating historical data.
+
+Example targeted follow-up:
+
+```bash
+API_BASE_URL="https://prediction-desk-staging-api.bluebush-22f9863f.centralus.azurecontainerapps.io" \
+PREDICTION_DESK_API_TOKEN="..." \
+CONFIRM_PUBLIC_READ_ONLY=true \
+PUBLIC_READ_VENUES=kalshi \
+PUBLIC_READ_ENDPOINT_TYPES=MARKET_DETAIL,ORDERBOOK \
+PUBLIC_READ_MARKET_IDS=kalshi_market_kxmvecrosscategory_s20260066678dfc5_7a15c644d6e \
+MAX_PAYLOADS=5 \
+scripts/staging_public_read_pilot.sh
+```
+
+Do not schedule public-read collection yet. Run targeted follow-up manually only after
+fixture smoke passes, budget alerts are active, backup posture is verified, and the exact
+market subset has been reviewed.
 
 ## Architecture
 

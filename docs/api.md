@@ -199,6 +199,25 @@ sample. It requires `CONFIRM_PUBLIC_READ_ONLY=true`, `PREDICTION_DESK_API_TOKEN`
 small `MAX_PAYLOADS` value. It calls only DataOps collection in `MANUAL_PUBLIC_FETCH` mode
 with `allow_network=true`, then reads the collection run, coverage, and gaps.
 
+Targeted follow-up uses the same endpoint with explicit endpoint types and existing
+canonical market IDs:
+
+```json
+{
+  "mode": "MANUAL_PUBLIC_FETCH",
+  "allow_network": true,
+  "venue_names": ["kalshi"],
+  "market_ids": ["kalshi_market_..."],
+  "endpoint_types": ["MARKET_DETAIL", "ORDERBOOK"],
+  "max_payloads": 5,
+  "metadata": {"source": "manual_targeted_public_read"}
+}
+```
+
+When endpoint types are omitted, the request remains a catalog/list pilot. Unsupported
+public-read endpoint combinations are returned as partial collection runs with clear
+metadata errors; unsupported historical data is not fabricated.
+
 For staging database migration and read-only count verification, use:
 
 ```bash
