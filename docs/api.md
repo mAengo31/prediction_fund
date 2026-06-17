@@ -199,6 +199,12 @@ sample. It requires `CONFIRM_PUBLIC_READ_ONLY=true`, `PREDICTION_DESK_API_TOKEN`
 small `MAX_PAYLOADS` value. It calls only DataOps collection in `MANUAL_PUBLIC_FETCH` mode
 with `allow_network=true`, then reads the collection run, coverage, and gaps.
 
+For staging database migration and read-only count verification, use:
+
+```bash
+DATABASE_URL="postgresql+psycopg://..." scripts/staging_migrate_and_verify.sh
+```
+
 ## Local Examples
 
 Start the API locally:

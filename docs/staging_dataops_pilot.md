@@ -52,6 +52,9 @@ For hosted staging, set:
 
 Enable automated database backups before running collection pilots.
 
+See [staging_deployment.md](staging_deployment.md) for the Render-style deployment
+blueprint and first-deploy sequence.
+
 ## Fixture Staging Smoke
 
 Fixture smoke does not call public venue endpoints:
@@ -100,6 +103,14 @@ DATABASE_URL="postgresql+psycopg://..." python scripts/inspect_db_counts.py --js
 It reports major domain, ingestion, market-data, research, replay, and DataOps table
 counts, including raw payloads, collection runs, coverage reports, and data gaps.
 
+For migration plus counts in one operator-safe step:
+
+```bash
+DATABASE_URL="postgresql+psycopg://..." scripts/staging_migrate_and_verify.sh
+```
+
+The helper hides the database URL and does not mutate state beyond Alembic migrations.
+
 ## Read Coverage And Gap Reports
 
 Use API endpoints:
@@ -146,6 +157,9 @@ Start with low-frequency fixture jobs for staging validation:
 ```bash
 prediction-desk dataops-cycle --mode FIXTURE
 ```
+
+The CLI does not need a `--no-public-fetch` flag for this path; fixture mode plus the
+absence of `--allow-network` keeps the cycle network-free.
 
 Only after fixture coverage/gaps look sane, schedule tiny public-read jobs with explicit
 operator approval. Keep early runs low-frequency with small `max_payloads`; increase scope

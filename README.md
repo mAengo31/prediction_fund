@@ -361,6 +361,8 @@ Authentication is controlled by `REQUIRE_API_TOKEN` and `PREDICTION_DESK_API_TOK
 Use `scripts/staging_smoke.sh` for fixture-only staging validation and
 `scripts/staging_public_read_pilot.sh` only after explicitly setting
 `CONFIRM_PUBLIC_READ_ONLY=true`.
+Use `scripts/staging_migrate_and_verify.sh` to run staging migrations without printing the
+database URL.
 
 See [docs/api.md](docs/api.md) for endpoint details and
 [docs/resolution_corpus.md](docs/resolution_corpus.md) for rule-analysis details. See
@@ -380,7 +382,9 @@ intent-only admissibility checks and abstract exposure gating. See
 scenario features and research/replay metadata. See [docs/data_scaling.md](docs/data_scaling.md)
 for market universes, collection plans, backfill jobs, coverage reports, and gap detection.
 See [docs/staging_dataops_pilot.md](docs/staging_dataops_pilot.md) for staging smoke,
-public-read pilot, database inspection, coverage/gap readback, and rollback guidance.
+public-read pilot, database inspection, coverage/gap readback, and rollback guidance. See
+[docs/staging_deployment.md](docs/staging_deployment.md) for the Render-style staging
+deployment packet.
 
 ## Docker Compose Quickstart
 

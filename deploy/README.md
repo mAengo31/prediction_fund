@@ -34,14 +34,42 @@ scripts/smoke_docker.sh
 - `PREDICTION_DESK_API_TOKEN` is marked as a secret placeholder.
 - `REQUIRE_API_TOKEN=true`.
 - `ENABLE_OPENAPI_DOCS=false`.
+- Public-read collection is not scheduled.
+- The optional fixture-only cron template is commented until an operator enables it.
 
 Run migrations as an explicit release/manual command:
 
 ```bash
-scripts/migrate.sh
+DATABASE_URL="postgresql+psycopg://..." scripts/staging_migrate_and_verify.sh
 ```
 
-Do not configure venue credentials in staging for this project stage.
+Run fixture staging smoke after deployment:
+
+```bash
+API_BASE_URL="https://your-staging-api.example.com" \
+PREDICTION_DESK_API_TOKEN="..." \
+scripts/staging_smoke.sh
+```
+
+The safe scheduled validation command, if later enabled, is:
+
+```bash
+prediction-desk dataops-cycle --mode FIXTURE
+```
+
+Do not configure venue credentials in staging for this project stage. Do not schedule
+public-read collection. Public-read pilot remains manual and requires
+`CONFIRM_PUBLIC_READ_ONLY=true`.
+
+See [../docs/staging_deployment.md](../docs/staging_deployment.md) and
+[../docs/staging_dataops_pilot.md](../docs/staging_dataops_pilot.md) for the operator
+runbooks.
+
+If the Render CLI is authenticated, validate the blueprint before applying it:
+
+```bash
+render blueprints validate deploy/render.yaml --output json
+```
 
 ## Production Research Target
 

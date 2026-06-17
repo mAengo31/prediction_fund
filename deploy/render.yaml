@@ -7,8 +7,7 @@ services:
     plan: starter
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    buildCommand: docker build -t prediction-desk .
-    startCommand: >-
+    dockerCommand: >-
       uvicorn prediction_desk.api.app:create_app
       --factory
       --host 0.0.0.0
@@ -31,6 +30,30 @@ services:
         sync: false
       - key: REQUIRE_API_TOKEN
         value: "true"
+      - key: GIT_COMMIT
+        sync: false
+
+  # Optional fixture-only validation cron. Leave commented until staging fixture smoke,
+  # managed Postgres backups, and operator approval are complete. This job is read-only
+  # with respect to venues: it uses committed fixtures and does not set allow_network.
+  #
+  # - type: cron
+  #   name: prediction-desk-fixture-dataops-cycle
+  #   runtime: docker
+  #   plan: starter
+  #   dockerfilePath: ./Dockerfile
+  #   dockerContext: .
+  #   schedule: "17 */6 * * *"
+  #   dockerCommand: prediction-desk dataops-cycle --mode FIXTURE
+  #   envVars:
+  #     - key: APP_ENV
+  #       value: staging
+  #     - key: DATABASE_URL
+  #       fromDatabase:
+  #         name: prediction-desk-postgres
+  #         property: connectionString
+  #     - key: LOG_LEVEL
+  #       value: INFO
 
 databases:
   - name: prediction-desk-postgres

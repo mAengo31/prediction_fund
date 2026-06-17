@@ -149,11 +149,16 @@ Staging settings:
 
 Use the safe template in [../deploy/render.yaml](../deploy/render.yaml) as a starting point.
 It contains placeholders only; configure secrets in the hosting platform.
+The Render-style Docker command is:
+
+```bash
+uvicorn prediction_desk.api.app:create_app --factory --host 0.0.0.0 --port "$PORT"
+```
 
 Run migrations against staging before smoke:
 
 ```bash
-DATABASE_URL="postgresql+psycopg://..." scripts/migrate.sh
+DATABASE_URL="postgresql+psycopg://..." scripts/staging_migrate_and_verify.sh
 ```
 
 Run fixture-only staging smoke without printing secrets:
@@ -183,7 +188,16 @@ DATABASE_URL="postgresql+psycopg://..." python scripts/inspect_db_counts.py
 
 Use managed Postgres with backups enabled before public-read pilots. The pilot script sends
 no venue credentials and refuses to run unless `CONFIRM_PUBLIC_READ_ONLY=true`. See
-[staging_dataops_pilot.md](staging_dataops_pilot.md) for the full operational runbook.
+[staging_deployment.md](staging_deployment.md) and
+[staging_dataops_pilot.md](staging_dataops_pilot.md) for the full operational runbooks.
+
+If a scheduled validation job is enabled later, use fixture mode only:
+
+```bash
+prediction-desk dataops-cycle --mode FIXTURE
+```
+
+Do not schedule public-read collection during this staging phase.
 
 ## D. Production Research Deployment Target
 
