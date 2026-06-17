@@ -10,6 +10,13 @@ from typing import Annotated
 
 import typer
 
+from prediction_desk.dataops.enums import CollectionRunMode, CoverageScopeType
+from prediction_desk.dataops.models import (
+    BackfillJobCreateRequest,
+    DataOpsCycleConfig,
+)
+from prediction_desk.dataops.runner import run_dataops_cycle
+from prediction_desk.dataops.service import DataOpsService, DataOpsServiceError
 from prediction_desk.divergence.enums import DivergenceStatus
 from prediction_desk.divergence.models import CrossVenueDivergenceRunConfig
 from prediction_desk.divergence.runner import DivergenceRunError, run_divergence_scan
@@ -3086,6 +3093,454 @@ def scenario_runs_command(
                 run.errors_count,
             )
             for run in runs
+        ],
+    )
+
+
+@app.command("dataops-defaults")
+def dataops_defaults_command(
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read/write.")
+    ] = None,
+) -> None:
+    """Creates deterministic default dataops universes and collection plans."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        defaults = DataOpsService(
+            PredictionMarketRepository(session)
+        ).setup_default_dataops_objects()
+
+    _print_table(
+        headers=("universes", "collection_plans"),
+        rows=[(len(defaults["universes"]), len(defaults["collection_plans"]))],
+    )
+
+
+@app.command("dataops-universes")
+def dataops_universes_command(
+    limit: Annotated[int, typer.Option("--limit", help="Maximum universes.")] = 50,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read.")
+    ] = None,
+) -> None:
+    """Lists configured market universes."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory() as session:
+        universes = DataOpsService(PredictionMarketRepository(session)).list_market_universes(
+            limit=limit,
+        )
+
+    _print_table(
+        headers=("universe_id", "name", "version", "active", "venues"),
+        rows=[
+            (
+                universe.universe_id,
+                universe.universe_name,
+                universe.universe_version,
+                universe.is_active,
+                ",".join(universe.venue_names),
+            )
+            for universe in universes
+        ],
+    )
+
+
+@app.command("dataops-build-universe")
+def dataops_build_universe_command(
+    universe_id: Annotated[str, typer.Option("--universe-id", help="Universe ID.")],
+    asof: Annotated[str | None, typer.Option("--asof", help="As-of ISO timestamp.")] = None,
+    force: Annotated[bool, typer.Option("--force", help="Rebuild existing members.")] = False,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read/write.")
+    ] = None,
+) -> None:
+    """Builds deterministic members for one market universe."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            members = DataOpsService(PredictionMarketRepository(session)).build_universe(
+                universe_id,
+                _parse_datetime(asof) if asof else datetime.now(tz=UTC),
+                force=force,
+            )
+        except DataOpsServiceError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+
+    _print_table(
+        headers=("universe_id", "members", "market_ids"),
+        rows=[(universe_id, len(members), ",".join(member.market_id for member in members))],
+    )
+
+
+@app.command("dataops-collection-plans")
+def dataops_collection_plans_command(
+    limit: Annotated[int, typer.Option("--limit", help="Maximum plans.")] = 50,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read.")
+    ] = None,
+) -> None:
+    """Lists configured read-only collection plans."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory() as session:
+        plans = DataOpsService(PredictionMarketRepository(session)).list_collection_plans(
+            limit=limit,
+        )
+
+    _print_table(
+        headers=("plan_id", "name", "cadence_seconds", "allow_network_default", "endpoints"),
+        rows=[
+            (
+                plan.collection_plan_id,
+                plan.plan_name,
+                plan.cadence_seconds,
+                plan.allow_network_default,
+                ",".join(plan.endpoint_types),
+            )
+            for plan in plans
+        ],
+    )
+
+
+@app.command("dataops-run-collection")
+def dataops_run_collection_command(
+    plan_id: Annotated[
+        str | None, typer.Option("--plan-id", help="Collection plan ID.")
+    ] = None,
+    universe_id: Annotated[
+        str | None, typer.Option("--universe-id", help="Universe ID.")
+    ] = None,
+    venue: Annotated[
+        list[str] | None,
+        typer.Option("--venue", help="Venue name; repeatable."),
+    ] = None,
+    market_id: Annotated[
+        list[str] | None,
+        typer.Option("--market-id", help="Market ID; repeatable."),
+    ] = None,
+    mode: Annotated[str, typer.Option("--mode", help="FIXTURE or MANUAL_PUBLIC_FETCH.")] = (
+        CollectionRunMode.FIXTURE.value
+    ),
+    allow_network: Annotated[
+        bool,
+        typer.Option("--allow-network", help="Required for manual public fetch."),
+    ] = False,
+    max_payloads: Annotated[
+        int | None,
+        typer.Option("--max-payloads", help="Maximum payloads to archive."),
+    ] = None,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read/write.")
+    ] = None,
+) -> None:
+    """Runs one read-only collection cycle."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            result = DataOpsService(PredictionMarketRepository(session)).run_collection_once(
+                plan_id=plan_id,
+                universe_id=universe_id,
+                venue_names=list(venue or []) or None,
+                market_ids=list(market_id or []) or None,
+                mode=mode,
+                allow_network=allow_network,
+                max_payloads=max_payloads,
+            )
+        except DataOpsServiceError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+
+    run = result.run
+    _print_table(
+        headers=(
+            "run_id",
+            "status",
+            "mode",
+            "payloads_archived",
+            "markets_processed",
+            "price_snapshots",
+            "quality_reports",
+            "errors",
+        ),
+        rows=[
+            (
+                run.collection_run_id,
+                run.status.value,
+                run.mode.value,
+                run.payloads_archived,
+                run.markets_processed,
+                run.price_snapshots_created,
+                run.quality_reports_created,
+                run.errors_count,
+            )
+        ],
+    )
+
+
+@app.command("dataops-backfill-create")
+def dataops_backfill_create_command(
+    venue: Annotated[str, typer.Option("--venue", help="Venue name.")],
+    endpoint_type: Annotated[
+        list[str],
+        typer.Option("--endpoint-type", help="Endpoint type; repeatable."),
+    ],
+    start: Annotated[str, typer.Option("--start", help="Backfill start ISO timestamp.")],
+    end: Annotated[str, typer.Option("--end", help="Backfill end ISO timestamp.")],
+    market_id: Annotated[
+        list[str] | None,
+        typer.Option("--market-id", help="Market ID; repeatable."),
+    ] = None,
+    interval_seconds: Annotated[
+        int | None,
+        typer.Option("--interval-seconds", help="Optional segment interval."),
+    ] = None,
+    allow_network: Annotated[
+        bool,
+        typer.Option("--allow-network", help="Opt in to read-only public network fetch."),
+    ] = False,
+    max_segments: Annotated[int, typer.Option("--max-segments")] = 1000,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read/write.")
+    ] = None,
+) -> None:
+    """Creates a read-only historical backfill job."""
+
+    request = BackfillJobCreateRequest(
+        venue_name=venue,
+        market_ids=list(market_id or []),
+        endpoint_types=list(endpoint_type),
+        start_time=_parse_datetime(start),
+        end_time=_parse_datetime(end),
+        interval_seconds=interval_seconds,
+        allow_network=allow_network,
+        max_segments=max_segments,
+    )
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            job = DataOpsService(PredictionMarketRepository(session)).create_backfill_job(
+                venue_name=request.venue_name,
+                endpoint_types=request.endpoint_types,
+                start_time=request.start_time,
+                end_time=request.end_time,
+                market_ids=request.market_ids,
+                job_name=request.job_name,
+                interval_seconds=request.interval_seconds,
+                allow_network=request.allow_network,
+                max_segments=request.max_segments,
+                metadata=request.metadata,
+            )
+        except DataOpsServiceError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+
+    _print_table(
+        headers=("job_id", "venue", "status", "segments_created", "allow_network"),
+        rows=[
+            (
+                job.backfill_job_id,
+                job.venue_name,
+                job.status.value,
+                job.segments_created,
+                job.allow_network,
+            )
+        ],
+    )
+
+
+@app.command("dataops-backfill-run")
+def dataops_backfill_run_command(
+    job_id: Annotated[str, typer.Option("--job-id", help="Backfill job ID.")],
+    force: Annotated[bool, typer.Option("--force", help="Persist duplicate hashes.")] = False,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read/write.")
+    ] = None,
+) -> None:
+    """Runs a read-only backfill job."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            result = DataOpsService(PredictionMarketRepository(session)).run_backfill_job(
+                job_id,
+                force=force,
+            )
+        except DataOpsServiceError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+
+    _print_table(
+        headers=("job_id", "status", "completed", "failed", "segments"),
+        rows=[
+            (
+                result.job.backfill_job_id,
+                result.job.status.value,
+                result.job.segments_completed,
+                result.job.segments_failed,
+                len(result.segments),
+            )
+        ],
+    )
+
+
+@app.command("dataops-coverage")
+def dataops_coverage_command(
+    scope_type: Annotated[
+        CoverageScopeType,
+        typer.Option("--scope-type", help="Coverage scope."),
+    ] = CoverageScopeType.GLOBAL,
+    universe_id: Annotated[
+        str | None, typer.Option("--universe-id", help="Universe ID.")
+    ] = None,
+    market_id: Annotated[str | None, typer.Option("--market-id", help="Market ID.")] = None,
+    venue: Annotated[str | None, typer.Option("--venue", help="Venue name.")] = None,
+    asof: Annotated[str | None, typer.Option("--asof", help="As-of ISO timestamp.")] = None,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read/write.")
+    ] = None,
+) -> None:
+    """Computes and stores a data coverage report."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        report = DataOpsService(PredictionMarketRepository(session)).compute_coverage_report(
+            scope_type=scope_type,
+            asof_timestamp=_parse_datetime(asof) if asof else datetime.now(tz=UTC),
+            universe_id=universe_id,
+            market_id=market_id,
+            venue_name=venue,
+        )
+
+    _print_table(
+        headers=(
+            "coverage_report_id",
+            "scope",
+            "total_markets",
+            "coverage_score",
+            "reason_codes",
+        ),
+        rows=[
+            (
+                report.coverage_report_id,
+                report.scope_type.value,
+                report.total_markets,
+                report.coverage_score,
+                ",".join(report.reason_codes),
+            )
+        ],
+    )
+
+
+@app.command("dataops-gaps")
+def dataops_gaps_command(
+    limit: Annotated[int, typer.Option("--limit", help="Maximum gaps.")] = 50,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read.")
+    ] = None,
+) -> None:
+    """Lists detected data gaps."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory() as session:
+        gaps = DataOpsService(PredictionMarketRepository(session)).list_data_gaps(limit=limit)
+
+    _print_table(
+        headers=("gap_id", "market_id", "gap_type", "severity", "reason_code"),
+        rows=[
+            (
+                gap.data_gap_id,
+                gap.market_id or "",
+                gap.gap_type.value,
+                gap.severity.value,
+                gap.reason_code,
+            )
+            for gap in gaps
+        ],
+    )
+
+
+@app.command("dataops-cycle")
+def dataops_cycle_command(
+    asof: Annotated[str | None, typer.Option("--asof", help="As-of ISO timestamp.")] = None,
+    plan_id: Annotated[
+        str | None, typer.Option("--plan-id", help="Collection plan ID.")
+    ] = None,
+    universe_id: Annotated[
+        str | None, typer.Option("--universe-id", help="Universe ID.")
+    ] = None,
+    venue: Annotated[
+        list[str] | None,
+        typer.Option("--venue", help="Venue name; repeatable."),
+    ] = None,
+    market_id: Annotated[
+        list[str] | None,
+        typer.Option("--market-id", help="Market ID; repeatable."),
+    ] = None,
+    mode: Annotated[str, typer.Option("--mode", help="FIXTURE or MANUAL_PUBLIC_FETCH.")] = (
+        CollectionRunMode.FIXTURE.value
+    ),
+    allow_network: Annotated[
+        bool,
+        typer.Option("--allow-network", help="Required for manual public fetch."),
+    ] = False,
+    collection: Annotated[
+        bool,
+        typer.Option("--collection/--no-collection", help="Run collection step."),
+    ] = True,
+    coverage: Annotated[
+        bool,
+        typer.Option("--coverage/--no-coverage", help="Compute coverage."),
+    ] = True,
+    gaps: Annotated[
+        bool,
+        typer.Option("--gaps/--no-gaps", help="Detect gaps."),
+    ] = True,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read/write.")
+    ] = None,
+) -> None:
+    """Runs one synchronous dataops cycle."""
+
+    config = DataOpsCycleConfig(
+        asof_timestamp=_parse_datetime(asof) if asof else datetime.now(tz=UTC),
+        run_collection=collection,
+        compute_coverage=coverage,
+        detect_gaps=gaps,
+        plan_id=plan_id,
+        universe_id=universe_id,
+        venue_names=list(venue or []) or None,
+        market_ids=list(market_id or []) or None,
+        mode=CollectionRunMode(str(mode).upper()),
+        allow_network=allow_network,
+    )
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        result = run_dataops_cycle(config, repo=PredictionMarketRepository(session))
+
+    _print_table(
+        headers=("collection_run_id", "coverage_score", "gaps", "metadata"),
+        rows=[
+            (
+                result.collection_run.collection_run_id if result.collection_run else "",
+                result.coverage_report.coverage_score if result.coverage_report else "",
+                len(result.gaps),
+                result.metadata,
+            )
         ],
     )
 

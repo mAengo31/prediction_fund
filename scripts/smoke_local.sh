@@ -241,6 +241,59 @@ import sys
 payload = json.loads(sys.argv[1])
 assert payload["summary"]["total_features"] >= 1, payload
 PY
+dataops_defaults="$(curl -fsS -X POST "${API_BASE_URL}/api/v1/dataops/defaults")"
+dataops_universes="$(curl -fsS "${API_BASE_URL}/api/v1/dataops/universes")"
+dataops_universe_id="$(python - "${dataops_defaults}" "${dataops_universes}" <<'PY'
+import json
+import sys
+
+defaults = json.loads(sys.argv[1])
+universes = json.loads(sys.argv[2])
+assert defaults["universes"], defaults
+assert defaults["collection_plans"], defaults
+for universe in universes:
+    if universe["universe_name"] == "all_active_prediction_markets_v1":
+        print(universe["universe_id"])
+        break
+else:
+    raise AssertionError(universes)
+PY
+)"
+dataops_members="$(curl -fsS -X POST "${API_BASE_URL}/api/v1/dataops/universes/${dataops_universe_id}/build?asof_timestamp=2026-06-16T12:20:00Z")"
+curl -fsS "${API_BASE_URL}/api/v1/dataops/universes/${dataops_universe_id}/members" >/dev/null
+curl -fsS "${API_BASE_URL}/api/v1/dataops/collection-plans" >/dev/null
+dataops_collection="$(curl -fsS -X POST "${API_BASE_URL}/api/v1/dataops/collection/run-once" \
+  -H "Content-Type: application/json" \
+  -d '{"venue_names":["kalshi"],"mode":"FIXTURE","allow_network":false,"max_payloads":10,"metadata":{"smoke":true}}')"
+dataops_backfill_job="$(curl -fsS -X POST "${API_BASE_URL}/api/v1/dataops/backfill/jobs" \
+  -H "Content-Type: application/json" \
+  -d "{\"venue_name\":\"kalshi\",\"market_ids\":[\"${INGESTED_MARKET_ID}\"],\"endpoint_types\":[\"ORDERBOOK\"],\"start_time\":\"2026-06-16T11:00:00Z\",\"end_time\":\"2026-06-16T12:00:00Z\",\"allow_network\":false,\"max_segments\":10,\"metadata\":{\"smoke\":true}}")"
+dataops_backfill_job_id="$(python - "${dataops_backfill_job}" <<'PY'
+import json
+import sys
+
+print(json.loads(sys.argv[1])["backfill_job_id"])
+PY
+)"
+dataops_backfill_run="$(curl -fsS -X POST "${API_BASE_URL}/api/v1/dataops/backfill/jobs/${dataops_backfill_job_id}/run")"
+curl -fsS "${API_BASE_URL}/api/v1/dataops/backfill/jobs/${dataops_backfill_job_id}/segments" >/dev/null
+dataops_coverage="$(curl -fsS -X POST "${API_BASE_URL}/api/v1/dataops/coverage/compute" \
+  -H "Content-Type: application/json" \
+  -d '{"scope_type":"GLOBAL","asof_timestamp":"2026-06-16T12:20:00Z"}')"
+dataops_gaps="$(curl -fsS -X POST "${API_BASE_URL}/api/v1/dataops/gaps/detect" \
+  -H "Content-Type: application/json" \
+  -d '{"scope_type":"GLOBAL","asof_timestamp":"2026-06-16T12:20:00Z","expected_cadence_seconds":3600}')"
+python - "${dataops_members}" "${dataops_collection}" "${dataops_backfill_run}" "${dataops_coverage}" "${dataops_gaps}" <<'PY'
+import json
+import sys
+
+members, collection, backfill, coverage, gaps = (json.loads(arg) for arg in sys.argv[1:])
+assert members, members
+assert collection["run"]["allow_network"] is False, collection
+assert backfill["segments"][0]["status"] == "SKIPPED_UNSUPPORTED", backfill
+assert coverage["total_markets"] >= 1, coverage
+assert isinstance(gaps, list), gaps
+PY
 curl -fsS -X POST "${API_BASE_URL}/api/v1/research/features/build" \
   -H "Content-Type: application/json" \
   -d "{\"market_id\":\"${MARKET_ID}\",\"asof_timestamp\":\"2026-06-16T12:00:00Z\",\"force\":true}" \
@@ -395,4 +448,4 @@ steps = json.loads(sys.argv[1])
 assert any(step["metadata"].get("latest_research_trace_ids") for step in steps), steps
 PY
 
-echo "Local smoke passed on ${API_BASE_URL}: ingestion, market data, integrity, equivalence, divergence, pretrade, paper, scenario, research, verdict, and replay succeeded."
+echo "Local smoke passed on ${API_BASE_URL}: ingestion, market data, integrity, equivalence, divergence, pretrade, paper, scenario, dataops, research, verdict, and replay succeeded."

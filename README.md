@@ -34,6 +34,9 @@ verdicts are represented as replayable snapshots.
 - Slow-Lane Scenario Feature Interface v1 for fixture-backed MiroFish-style report import,
   scenario seed bundles, normalized scenario feature snapshots, and research/replay
   metadata exposure.
+- Data Scale / Historical Backfill / Read-Only Collection Orchestrator v1 for market
+  universes, collection plans, run-once fixture collection, historical backfill records,
+  coverage reports, and data-gap detection.
 - A deterministic v0 resolution-risk scorer.
 - A deterministic v0 trust-verdict builder.
 - SQLAlchemy 2.0 ORM mappings and repository methods for local persistence.
@@ -271,6 +274,18 @@ prediction-desk scenario-run \
   --asof 2026-06-16T12:00:00+00:00
 ```
 
+Run read-only data scaling checks:
+
+```bash
+prediction-desk dataops-defaults
+prediction-desk dataops-universes
+prediction-desk dataops-collection-plans
+prediction-desk dataops-run-collection --venue kalshi --mode FIXTURE
+prediction-desk dataops-coverage --scope-type GLOBAL
+prediction-desk dataops-gaps
+prediction-desk dataops-cycle --mode FIXTURE
+```
+
 Manual public sampling is opt-in and read-only:
 
 ```bash
@@ -355,7 +370,8 @@ cross-venue divergence context. See [docs/pretrade_gate.md](docs/pretrade_gate.m
 intent-only admissibility checks and abstract exposure gating. See
 [docs/paper_execution.md](docs/paper_execution.md) for simulated-only paper execution. See
 [docs/scenario_features.md](docs/scenario_features.md) for fixture-backed slow-lane
-scenario features and research/replay metadata.
+scenario features and research/replay metadata. See [docs/data_scaling.md](docs/data_scaling.md)
+for market universes, collection plans, backfill jobs, coverage reports, and gap detection.
 
 ## Docker Compose Quickstart
 
@@ -378,7 +394,7 @@ scripts/smoke_docker.sh
 
 The smoke path validates Postgres migrations, sample loading, `/healthz`, `/readyz`,
 `/api/v1/markets`, run-once fixture ingestion, venue mappings, canonical market data,
-data-quality recomputation, resolution analysis, rule diffing, trust-verdict recomputation,
+data-quality recomputation, dataops defaults/collection/coverage/gaps, resolution analysis, rule diffing, trust-verdict recomputation,
 integrity analysis, equivalence scans, divergence scans, integrity/divergence-aware
 trust-verdict metadata, pretrade checks, paper policy creation, simulated paper fills,
 paper portfolio readback, replay run creation, replay summary readback, replay
@@ -439,6 +455,12 @@ Paper Execution Simulator v1 consumes hypothetical intents only after pre-trade 
 It creates simulated orders, fills, ledger entries, position snapshots, and portfolio
 snapshots using stored as-of market data. All position, equity, and mark-to-market fields
 are explicitly named simulated and no venue order or real account state is produced.
+
+DataOps v1 organizes read-only data scaling. It builds research universes, validates
+collection plans, runs one-shot fixture collection, records unsupported historical
+endpoints, computes coverage reports, and persists data gaps. Historical imports preserve
+`available_at`; old `observed_at` values are not replay-visible until the imported data is
+available to the system.
 
 Scores and verdicts are deterministic. They accept explicit market, rule snapshot, order
 book snapshot, and as-of timestamp inputs. The resulting verdict stores model versions,

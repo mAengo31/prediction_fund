@@ -104,6 +104,10 @@ review-only signal and no proposal.
 `scenario_context_research_v1` uses scenario features only to generate `WATCH` or
 `REVIEW_ONLY` signals. It never creates proposals.
 
+DataOps coverage and gap reports are not strategy triggers in v1. They help researchers
+inspect whether fixture or public-read collection has enough rule, price, liquidity, and
+quality coverage before interpreting research results.
+
 ## No-Lookahead Behavior
 
 Research feature building uses repository methods that honor as-of semantics:
@@ -111,6 +115,7 @@ Research feature building uses repository methods that honor as-of semantics:
 - Market data uses `available_at <= asof_timestamp`.
 - Integrity, equivalence, divergence, pre-trade, paper, scenario, and research list methods use
   `available_at <= asof_timestamp` where applicable.
+- Backfilled historical market data remains hidden from research until its `available_at`.
 - Trust and rule context use existing point-in-time repository semantics.
 
 Generated research features set `available_at` to the research as-of timestamp so replay

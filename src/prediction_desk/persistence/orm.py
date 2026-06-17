@@ -2049,3 +2049,225 @@ class ScenarioRunSummaryRecord(Base):
     reason_code_counts: Mapped[dict[str, int]] = mapped_column(JSON, nullable=False)
     markets_processed: Mapped[int] = mapped_column(nullable=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class MarketUniverseDefinitionRecord(Base):
+    __tablename__ = "market_universe_definitions"
+
+    universe_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    universe_name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    universe_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    is_active: Mapped[bool] = mapped_column(nullable=False, index=True)
+    venue_names: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    categories: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    market_statuses: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    market_types: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    include_market_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    exclude_market_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    title_include_patterns: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    title_exclude_patterns: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    min_market_data_quality_score: Mapped[int | None] = mapped_column()
+    min_liquidity_depth: Mapped[Decimal | None] = mapped_column(Numeric(30, 10))
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class MarketUniverseMemberRecord(Base):
+    __tablename__ = "market_universe_members"
+
+    universe_member_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    universe_id: Mapped[str] = mapped_column(
+        ForeignKey("market_universe_definitions.universe_id"), nullable=False, index=True
+    )
+    market_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    venue_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    venue_name: Mapped[str | None] = mapped_column(String(256), index=True)
+    event_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    asof_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    inclusion_reason_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    exclusion_reason_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class CollectionPlanRecord(Base):
+    __tablename__ = "collection_plans"
+
+    collection_plan_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    plan_name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    plan_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    is_active: Mapped[bool] = mapped_column(nullable=False, index=True)
+    universe_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    venue_names: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    endpoint_types: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    cadence_seconds: Mapped[int] = mapped_column(nullable=False)
+    lookback_seconds: Mapped[int | None] = mapped_column()
+    max_markets_per_run: Mapped[int] = mapped_column(nullable=False)
+    max_payloads_per_run: Mapped[int] = mapped_column(nullable=False)
+    allow_network_default: Mapped[bool] = mapped_column(nullable=False)
+    derive_market_data: Mapped[bool] = mapped_column(nullable=False)
+    compute_quality: Mapped[bool] = mapped_column(nullable=False)
+    analyze_rules: Mapped[bool] = mapped_column(nullable=False)
+    recompute_verdicts: Mapped[bool] = mapped_column(nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class CollectionRunRecord(Base):
+    __tablename__ = "collection_runs"
+
+    collection_run_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    collection_plan_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    universe_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    mode: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    asof_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    allow_network: Mapped[bool] = mapped_column(nullable=False)
+    venue_names: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    market_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    endpoint_types: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    payloads_archived: Mapped[int] = mapped_column(nullable=False)
+    markets_processed: Mapped[int] = mapped_column(nullable=False)
+    price_snapshots_created: Mapped[int] = mapped_column(nullable=False)
+    liquidity_snapshots_created: Mapped[int] = mapped_column(nullable=False)
+    quality_reports_created: Mapped[int] = mapped_column(nullable=False)
+    ingestion_runs_created: Mapped[int] = mapped_column(nullable=False)
+    errors_count: Mapped[int] = mapped_column(nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class BackfillJobRecord(Base):
+    __tablename__ = "backfill_jobs"
+
+    backfill_job_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    job_name: Mapped[str | None] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    venue_name: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    market_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    endpoint_types: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    interval_seconds: Mapped[int | None] = mapped_column()
+    allow_network: Mapped[bool] = mapped_column(nullable=False)
+    max_segments: Mapped[int] = mapped_column(nullable=False)
+    segments_created: Mapped[int] = mapped_column(nullable=False)
+    segments_completed: Mapped[int] = mapped_column(nullable=False)
+    segments_failed: Mapped[int] = mapped_column(nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class BackfillSegmentRecord(Base):
+    __tablename__ = "backfill_segments"
+
+    backfill_segment_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    backfill_job_id: Mapped[str] = mapped_column(
+        ForeignKey("backfill_jobs.backfill_job_id"), nullable=False, index=True
+    )
+    venue_name: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    market_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    endpoint_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    segment_start_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    segment_end_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    supported: Mapped[bool] = mapped_column(nullable=False, index=True)
+    unsupported_reason: Mapped[str | None] = mapped_column(String(256))
+    payloads_archived: Mapped[int] = mapped_column(nullable=False)
+    snapshots_created: Mapped[int] = mapped_column(nullable=False)
+    errors_count: Mapped[int] = mapped_column(nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class DataCoverageReportRecord(Base):
+    __tablename__ = "data_coverage_reports"
+
+    coverage_report_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    asof_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    scope_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    universe_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    market_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    venue_name: Mapped[str | None] = mapped_column(String(256), index=True)
+    start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    total_markets: Mapped[int] = mapped_column(nullable=False)
+    markets_with_rules: Mapped[int] = mapped_column(nullable=False)
+    markets_with_orderbooks: Mapped[int] = mapped_column(nullable=False)
+    markets_with_price_snapshots: Mapped[int] = mapped_column(nullable=False)
+    markets_with_liquidity_snapshots: Mapped[int] = mapped_column(nullable=False)
+    markets_with_quality_reports: Mapped[int] = mapped_column(nullable=False)
+    stale_markets: Mapped[int] = mapped_column(nullable=False)
+    missing_rule_markets: Mapped[int] = mapped_column(nullable=False)
+    missing_price_markets: Mapped[int] = mapped_column(nullable=False)
+    missing_liquidity_markets: Mapped[int] = mapped_column(nullable=False)
+    average_quality_score: Mapped[Decimal | None] = mapped_column(Numeric(30, 10))
+    coverage_score: Mapped[int] = mapped_column(nullable=False)
+    reason_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class DataGapRecord(Base):
+    __tablename__ = "data_gaps"
+
+    data_gap_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    coverage_report_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    market_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    venue_name: Mapped[str | None] = mapped_column(String(256), index=True)
+    gap_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    severity: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    detected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    expected_cadence_seconds: Mapped[int | None] = mapped_column()
+    observed_count: Mapped[int] = mapped_column(nullable=False)
+    expected_count: Mapped[int | None] = mapped_column()
+    reason_code: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class DataRetentionPolicyRecord(Base):
+    __tablename__ = "data_retention_policies"
+
+    retention_policy_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    policy_name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    is_active: Mapped[bool] = mapped_column(nullable=False, index=True)
+    raw_payload_retention_days: Mapped[int | None] = mapped_column()
+    orderbook_snapshot_retention_days: Mapped[int | None] = mapped_column()
+    price_snapshot_retention_days: Mapped[int | None] = mapped_column()
+    liquidity_snapshot_retention_days: Mapped[int | None] = mapped_column()
+    quality_report_retention_days: Mapped[int | None] = mapped_column()
+    archive_before_delete: Mapped[bool] = mapped_column(nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)

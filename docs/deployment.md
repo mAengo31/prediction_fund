@@ -10,7 +10,8 @@ fast-lane integrity assessments, and a run-once ingestion scheduler suitable for
 deployment jobs. It also exposes deterministic cross-venue equivalence assessments for
 contract comparison before any cross-venue research comparison. It also exposes
 deterministic cross-venue divergence assessments as research context only after
-equivalence permits comparison.
+equivalence permits comparison. DataOps endpoints add read-only market universes,
+collection plans, historical backfill records, coverage reports, and gap detection.
 
 It is not a trading system. This deployment surface intentionally includes no live trading,
 no venue credentials, no private keys, no wallets, and no order placement.
@@ -92,7 +93,8 @@ curl -X POST \
 Run the full Docker smoke path. It validates Postgres startup, Alembic migrations, sample
 loading, `/healthz`, `/readyz`, `/api/v1/markets`, resolution analysis, rule diffing,
 run-once fixture ingestion, venue mappings, canonical market data, data-quality reports,
-integrity analysis, integrity-aware trust-verdict recomputation, replay run creation,
+dataops defaults/universes/fixture collection/backfill coverage/gaps, integrity analysis,
+integrity-aware trust-verdict recomputation, replay run creation,
 equivalence candidate generation, equivalence assessment/classes, divergence analysis and
 runs, pretrade checks, simulated paper execution, paper portfolio readback, deterministic
 research strategies, scenario fixture import, scenario feature readback, research
@@ -172,6 +174,8 @@ The production research target should be:
 - Strategy research endpoints generate hypotheses, proposals, traces, and simulated
   attribution only; they must continue to depend on the pre-trade gate and simulated paper
   layer rather than live venue access.
+- DataOps endpoints are read-only collection and coverage controls. Manual public fetch
+  requires explicit `allow_network=true`; no credentials are accepted.
 
 Bearer-token auth is temporary. Replace it with stronger service authentication or SSO before
 real production use.

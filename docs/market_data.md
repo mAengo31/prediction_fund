@@ -97,6 +97,14 @@ The run-once path can:
 - update ingestion cursors
 - optionally analyze rules and recompute trust verdicts
 
+## DataOps Coverage
+
+DataOps v1 sits above raw ingestion and canonical market data. It defines market universes,
+collection plans, one-shot fixture/public-read collection runs, historical backfill jobs,
+coverage reports, and data gaps. Coverage and gap reports measure whether market data is
+complete enough for research; they do not fabricate unsupported history or change replay
+availability.
+
 ## CLI
 
 ```bash
@@ -106,6 +114,9 @@ prediction-desk market-data-latest --market-id kalshi_market_kxweather_nyc_rain_
 prediction-desk market-data-prices --market-id kalshi_market_kxweather_nyc_rain_20260930
 prediction-desk data-quality --market-id kalshi_market_kxweather_nyc_rain_20260930
 prediction-desk ingestion-cursors
+prediction-desk dataops-run-collection --venue kalshi --mode FIXTURE
+prediction-desk dataops-coverage --scope-type GLOBAL
+prediction-desk dataops-gaps
 ```
 
 ## API
@@ -120,6 +131,9 @@ Market-data endpoints are under `/api/v1`:
 - `GET /api/v1/markets/{market_id}/data-quality/latest`
 - `GET /api/v1/ingestion/cursors`
 - `POST /api/v1/ingestion/run-once`
+- `POST /api/v1/dataops/collection/run-once`
+- `POST /api/v1/dataops/coverage/compute`
+- `POST /api/v1/dataops/gaps/detect`
 
 ## Future Use
 
@@ -133,4 +147,5 @@ MiroFish are deliberately not implemented in this layer.
 See [integrity_signals.md](integrity_signals.md) for the deterministic integrity features
 derived from canonical market data. See [equivalence.md](equivalence.md) for deterministic
 contract-comparison scoring. See [pretrade_gate.md](pretrade_gate.md) for how quality and
-liquidity context feed admissibility decisions.
+liquidity context feed admissibility decisions. See [data_scaling.md](data_scaling.md) for
+collection orchestration, backfill records, coverage reports, and gap detection.

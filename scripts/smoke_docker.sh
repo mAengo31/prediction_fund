@@ -274,6 +274,82 @@ assert feature["scenario_feature_snapshot_id"], feature
 assert latest["scenario_feature_snapshot_id"] == feature["scenario_feature_snapshot_id"], latest
 assert run["summary"]["total_features"] >= 1, run
 PY
+dataops_defaults="$(curl_json POST "${API_BASE_URL}/api/v1/dataops/defaults")"
+dataops_universes="$(curl_json GET "${API_BASE_URL}/api/v1/dataops/universes")"
+dataops_universe_id="$(python - "$dataops_defaults" "$dataops_universes" <<'PY'
+import json
+import sys
+
+defaults = json.loads(sys.argv[1])
+universes = json.loads(sys.argv[2])
+assert defaults["universes"], defaults
+assert defaults["collection_plans"], defaults
+for universe in universes:
+    if universe["universe_name"] == "all_active_prediction_markets_v1":
+        print(universe["universe_id"])
+        break
+else:
+    raise AssertionError(universes)
+PY
+)"
+dataops_members="$(
+  curl_json POST "${API_BASE_URL}/api/v1/dataops/universes/${dataops_universe_id}/build?asof_timestamp=2026-06-16T12:20:00Z"
+)"
+dataops_member_list="$(
+  curl_json GET "${API_BASE_URL}/api/v1/dataops/universes/${dataops_universe_id}/members"
+)"
+dataops_plans="$(curl_json GET "${API_BASE_URL}/api/v1/dataops/collection-plans")"
+dataops_collection="$(
+  curl -fsS -X POST "${API_BASE_URL}/api/v1/dataops/collection/run-once" \
+    -H "Content-Type: application/json" \
+    -d '{"venue_names":["kalshi"],"mode":"FIXTURE","allow_network":false,"max_payloads":10,"metadata":{"smoke":true}}'
+)" || fail "POST ${API_BASE_URL}/api/v1/dataops/collection/run-once"
+dataops_backfill_job="$(
+  curl -fsS -X POST "${API_BASE_URL}/api/v1/dataops/backfill/jobs" \
+    -H "Content-Type: application/json" \
+    -d "{\"venue_name\":\"kalshi\",\"market_ids\":[\"${INGESTED_MARKET_ID}\"],\"endpoint_types\":[\"ORDERBOOK\"],\"start_time\":\"2026-06-16T11:00:00Z\",\"end_time\":\"2026-06-16T12:00:00Z\",\"allow_network\":false,\"max_segments\":10,\"metadata\":{\"smoke\":true}}"
+)" || fail "POST ${API_BASE_URL}/api/v1/dataops/backfill/jobs"
+dataops_backfill_job_id="$(python - "$dataops_backfill_job" <<'PY'
+import json
+import sys
+
+print(json.loads(sys.argv[1])["backfill_job_id"])
+PY
+)"
+dataops_backfill_run="$(
+  curl_json POST "${API_BASE_URL}/api/v1/dataops/backfill/jobs/${dataops_backfill_job_id}/run"
+)"
+dataops_backfill_segments="$(
+  curl_json GET "${API_BASE_URL}/api/v1/dataops/backfill/jobs/${dataops_backfill_job_id}/segments"
+)"
+dataops_coverage="$(
+  curl -fsS -X POST "${API_BASE_URL}/api/v1/dataops/coverage/compute" \
+    -H "Content-Type: application/json" \
+    -d '{"scope_type":"GLOBAL","asof_timestamp":"2026-06-16T12:20:00Z"}'
+)" || fail "POST ${API_BASE_URL}/api/v1/dataops/coverage/compute"
+dataops_gaps="$(
+  curl -fsS -X POST "${API_BASE_URL}/api/v1/dataops/gaps/detect" \
+    -H "Content-Type: application/json" \
+    -d '{"scope_type":"GLOBAL","asof_timestamp":"2026-06-16T12:20:00Z","expected_cadence_seconds":3600}'
+)" || fail "POST ${API_BASE_URL}/api/v1/dataops/gaps/detect"
+python - "$dataops_members" "$dataops_member_list" "$dataops_plans" "$dataops_collection" \
+  "$dataops_backfill_run" "$dataops_backfill_segments" "$dataops_coverage" \
+  "$dataops_gaps" <<'PY'
+import json
+import sys
+
+members, member_list, plans, collection, backfill, segments, coverage, gaps = (
+    json.loads(arg) for arg in sys.argv[1:]
+)
+assert members, members
+assert member_list, member_list
+assert plans, plans
+assert collection["run"]["allow_network"] is False, collection
+assert backfill["segments"][0]["status"] == "SKIPPED_UNSUPPORTED", backfill
+assert segments[0]["status"] == "SKIPPED_UNSUPPORTED", segments
+assert coverage["total_markets"] >= 1, coverage
+assert isinstance(gaps, list), gaps
+PY
 research_features="$(
   curl -fsS -X POST "${API_BASE_URL}/api/v1/research/features/build" \
     -H "Content-Type: application/json" \
@@ -577,4 +653,4 @@ assert any(
 ), pretrade_replay_steps
 PY
 
-echo "Docker smoke passed for ${COMPOSE_PROJECT_NAME}: healthz, readyz, ingestion, market data, quality, integrity, equivalence, divergence, pretrade, paper, scenario, research, verdict, and replay succeeded."
+echo "Docker smoke passed for ${COMPOSE_PROJECT_NAME}: healthz, readyz, ingestion, market data, quality, integrity, equivalence, divergence, pretrade, paper, scenario, dataops, research, verdict, and replay succeeded."

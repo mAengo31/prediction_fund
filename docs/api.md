@@ -140,6 +140,23 @@ Common API failures use this envelope:
 | `GET` | `/api/v1/scenario/runs` | Configurable | List scenario runs. |
 | `GET` | `/api/v1/scenario/runs/{scenario_run_id}` | Configurable | Read one scenario run. |
 | `GET` | `/api/v1/scenario/runs/{scenario_run_id}/summary` | Configurable | Read one scenario run summary. |
+| `POST` | `/api/v1/dataops/defaults` | Configurable | Create deterministic market universes and collection plans. |
+| `GET` | `/api/v1/dataops/universes` | Configurable | List market universe definitions. |
+| `POST` | `/api/v1/dataops/universes/{universe_id}/build` | Configurable | Build universe members as of a timestamp. |
+| `GET` | `/api/v1/dataops/universes/{universe_id}/members` | Configurable | List universe members. |
+| `GET` | `/api/v1/dataops/collection-plans` | Configurable | List read-only collection plans. |
+| `POST` | `/api/v1/dataops/collection/run-once` | Configurable | Run one fixture or explicit public-read collection job. |
+| `GET` | `/api/v1/dataops/collection-runs` | Configurable | List collection runs. |
+| `GET` | `/api/v1/dataops/collection-runs/{collection_run_id}` | Configurable | Read one collection run. |
+| `POST` | `/api/v1/dataops/backfill/jobs` | Configurable | Create a read-only historical backfill job. |
+| `POST` | `/api/v1/dataops/backfill/jobs/{backfill_job_id}/run` | Configurable | Run one backfill job. |
+| `GET` | `/api/v1/dataops/backfill/jobs` | Configurable | List backfill jobs. |
+| `GET` | `/api/v1/dataops/backfill/jobs/{backfill_job_id}` | Configurable | Read one backfill job. |
+| `GET` | `/api/v1/dataops/backfill/jobs/{backfill_job_id}/segments` | Configurable | List backfill segments. |
+| `POST` | `/api/v1/dataops/coverage/compute` | Configurable | Compute and store a coverage report. |
+| `GET` | `/api/v1/dataops/coverage` | Configurable | List coverage reports. |
+| `POST` | `/api/v1/dataops/gaps/detect` | Configurable | Detect and store data gaps. |
+| `GET` | `/api/v1/dataops/gaps` | Configurable | List data gaps. |
 | `POST` | `/api/v1/research/strategies/default` | Configurable | Create deterministic default research strategies if missing. |
 | `GET` | `/api/v1/research/strategies` | Configurable | List research strategy definitions. |
 | `GET` | `/api/v1/research/strategies/{strategy_id}` | Configurable | Read one research strategy definition. |

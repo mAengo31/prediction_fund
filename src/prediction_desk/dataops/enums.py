@@ -1,0 +1,62 @@
+"""Enums for read-only data operations."""
+
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+class CollectionRunStatus(StrEnum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    PARTIAL = "PARTIAL"
+
+
+class CollectionRunMode(StrEnum):
+    FIXTURE = "FIXTURE"
+    MANUAL_PUBLIC_FETCH = "MANUAL_PUBLIC_FETCH"
+    MIXED = "MIXED"
+
+
+class BackfillJobStatus(StrEnum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    PARTIAL = "PARTIAL"
+
+
+class BackfillSegmentStatus(StrEnum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    SKIPPED_UNSUPPORTED = "SKIPPED_UNSUPPORTED"
+
+
+class CoverageScopeType(StrEnum):
+    MARKET = "MARKET"
+    UNIVERSE = "UNIVERSE"
+    VENUE = "VENUE"
+    GLOBAL = "GLOBAL"
+
+
+class DataGapType(StrEnum):
+    MISSING_RULE_SNAPSHOT = "MISSING_RULE_SNAPSHOT"
+    MISSING_ORDERBOOK = "MISSING_ORDERBOOK"
+    MISSING_PRICE_SNAPSHOT = "MISSING_PRICE_SNAPSHOT"
+    MISSING_LIQUIDITY_SNAPSHOT = "MISSING_LIQUIDITY_SNAPSHOT"
+    STALE_MARKET_DATA = "STALE_MARKET_DATA"
+    MISSING_QUALITY_REPORT = "MISSING_QUALITY_REPORT"
+    UNSUPPORTED_HISTORICAL_ENDPOINT = "UNSUPPORTED_HISTORICAL_ENDPOINT"
+    NORMALIZATION_ERROR = "NORMALIZATION_ERROR"
+    UNKNOWN = "UNKNOWN"
+
+
+class DataGapSeverity(StrEnum):
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
+

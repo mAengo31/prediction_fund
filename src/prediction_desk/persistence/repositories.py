@@ -9,6 +9,26 @@ from typing import Any
 from sqlalchemy import desc, or_, select
 from sqlalchemy.orm import Session
 
+from prediction_desk.dataops.enums import (
+    BackfillJobStatus,
+    BackfillSegmentStatus,
+    CollectionRunMode,
+    CollectionRunStatus,
+    CoverageScopeType,
+    DataGapSeverity,
+    DataGapType,
+)
+from prediction_desk.dataops.models import (
+    BackfillJob,
+    BackfillSegment,
+    CollectionPlan,
+    CollectionRun,
+    DataCoverageReport,
+    DataGap,
+    DataRetentionPolicy,
+    MarketUniverseDefinition,
+    MarketUniverseMember,
+)
 from prediction_desk.divergence.enums import (
     DivergenceActionHint,
     DivergenceRunStatus,
@@ -110,11 +130,18 @@ from prediction_desk.paper.models import (
 )
 from prediction_desk.persistence.orm import (
     AmbiguityAssessmentRecord,
+    BackfillJobRecord,
+    BackfillSegmentRecord,
+    CollectionPlanRecord,
+    CollectionRunRecord,
     CrossVenueDivergenceAssessmentRecord,
     CrossVenueDivergenceRunRecord,
     CrossVenueDivergenceRunSummaryRecord,
     CrossVenueDivergenceSignalRecord,
     CrossVenueDivergenceSnapshotRecord,
+    DataCoverageReportRecord,
+    DataGapRecord,
+    DataRetentionPolicyRecord,
     EquivalenceCandidateRecord,
     EquivalenceClassRecord,
     EquivalenceRunRecord,
@@ -136,6 +163,8 @@ from prediction_desk.persistence.orm import (
     MarketRecord,
     MarketRestrictionRuleRecord,
     MarketRuleSnapshotRecord,
+    MarketUniverseDefinitionRecord,
+    MarketUniverseMemberRecord,
     OrderBookSnapshotRecord,
     OutcomeEquivalenceMappingRecord,
     OutcomeRecord,
@@ -2928,6 +2957,253 @@ class PredictionMarketRepository:
         record = self.session.scalar(stmt)
         return _scenario_run_summary_from_record(record) if record else None
 
+    def save_market_universe_definition(
+        self,
+        definition: MarketUniverseDefinition,
+    ) -> MarketUniverseDefinition:
+        self.session.merge(_market_universe_definition_to_record(definition))
+        self.session.flush()
+        return definition
+
+    def get_market_universe_definition(
+        self,
+        universe_id: str,
+    ) -> MarketUniverseDefinition | None:
+        record = self.session.get(MarketUniverseDefinitionRecord, universe_id)
+        return _market_universe_definition_from_record(record) if record else None
+
+    def list_market_universe_definitions(
+        self,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[MarketUniverseDefinition]:
+        stmt = (
+            select(MarketUniverseDefinitionRecord)
+            .order_by(
+                MarketUniverseDefinitionRecord.universe_name,
+                MarketUniverseDefinitionRecord.universe_version,
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        return [
+            _market_universe_definition_from_record(record)
+            for record in self.session.scalars(stmt)
+        ]
+
+    def save_market_universe_member(
+        self,
+        member: MarketUniverseMember,
+    ) -> MarketUniverseMember:
+        self.session.merge(_market_universe_member_to_record(member))
+        self.session.flush()
+        return member
+
+    def list_market_universe_members(
+        self,
+        *,
+        universe_id: str,
+        market_id: str | None = None,
+        asof_timestamp: datetime | None = None,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[MarketUniverseMember]:
+        stmt = (
+            select(MarketUniverseMemberRecord)
+            .where(MarketUniverseMemberRecord.universe_id == universe_id)
+            .order_by(
+                desc(MarketUniverseMemberRecord.asof_timestamp),
+                MarketUniverseMemberRecord.market_id,
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        if market_id is not None:
+            stmt = stmt.where(MarketUniverseMemberRecord.market_id == market_id)
+        if asof_timestamp is not None:
+            stmt = stmt.where(MarketUniverseMemberRecord.asof_timestamp <= asof_timestamp)
+        return [
+            _market_universe_member_from_record(record)
+            for record in self.session.scalars(stmt)
+        ]
+
+    def save_collection_plan(self, plan: CollectionPlan) -> CollectionPlan:
+        self.session.merge(_collection_plan_to_record(plan))
+        self.session.flush()
+        return plan
+
+    def get_collection_plan(self, collection_plan_id: str) -> CollectionPlan | None:
+        record = self.session.get(CollectionPlanRecord, collection_plan_id)
+        return _collection_plan_from_record(record) if record else None
+
+    def list_collection_plans(
+        self,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[CollectionPlan]:
+        stmt = (
+            select(CollectionPlanRecord)
+            .order_by(CollectionPlanRecord.plan_name, CollectionPlanRecord.plan_version)
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_collection_plan_from_record(record) for record in self.session.scalars(stmt)]
+
+    def save_collection_run(self, run: CollectionRun) -> CollectionRun:
+        self.session.merge(_collection_run_to_record(run))
+        self.session.flush()
+        return run
+
+    def update_collection_run(self, run: CollectionRun) -> CollectionRun:
+        return self.save_collection_run(run)
+
+    def get_collection_run(self, collection_run_id: str) -> CollectionRun | None:
+        record = self.session.get(CollectionRunRecord, collection_run_id)
+        return _collection_run_from_record(record) if record else None
+
+    def list_collection_runs(
+        self,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[CollectionRun]:
+        stmt = (
+            select(CollectionRunRecord)
+            .order_by(desc(CollectionRunRecord.created_at), CollectionRunRecord.collection_run_id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_collection_run_from_record(record) for record in self.session.scalars(stmt)]
+
+    def save_backfill_job(self, job: BackfillJob) -> BackfillJob:
+        self.session.merge(_backfill_job_to_record(job))
+        self.session.flush()
+        return job
+
+    def update_backfill_job(self, job: BackfillJob) -> BackfillJob:
+        return self.save_backfill_job(job)
+
+    def get_backfill_job(self, backfill_job_id: str) -> BackfillJob | None:
+        record = self.session.get(BackfillJobRecord, backfill_job_id)
+        return _backfill_job_from_record(record) if record else None
+
+    def list_backfill_jobs(
+        self,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[BackfillJob]:
+        stmt = (
+            select(BackfillJobRecord)
+            .order_by(desc(BackfillJobRecord.created_at), BackfillJobRecord.backfill_job_id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_backfill_job_from_record(record) for record in self.session.scalars(stmt)]
+
+    def save_backfill_segment(self, segment: BackfillSegment) -> BackfillSegment:
+        self.session.merge(_backfill_segment_to_record(segment))
+        self.session.flush()
+        return segment
+
+    def update_backfill_segment(self, segment: BackfillSegment) -> BackfillSegment:
+        return self.save_backfill_segment(segment)
+
+    def list_backfill_segments(
+        self,
+        *,
+        backfill_job_id: str | None = None,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[BackfillSegment]:
+        stmt = (
+            select(BackfillSegmentRecord)
+            .order_by(
+                BackfillSegmentRecord.segment_start_time,
+                BackfillSegmentRecord.backfill_segment_id,
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        if backfill_job_id is not None:
+            stmt = stmt.where(BackfillSegmentRecord.backfill_job_id == backfill_job_id)
+        return [_backfill_segment_from_record(record) for record in self.session.scalars(stmt)]
+
+    def save_data_coverage_report(
+        self,
+        report: DataCoverageReport,
+    ) -> DataCoverageReport:
+        self.session.merge(_data_coverage_report_to_record(report))
+        self.session.flush()
+        return report
+
+    def get_data_coverage_report(
+        self,
+        coverage_report_id: str,
+    ) -> DataCoverageReport | None:
+        record = self.session.get(DataCoverageReportRecord, coverage_report_id)
+        return _data_coverage_report_from_record(record) if record else None
+
+    def list_data_coverage_reports(
+        self,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[DataCoverageReport]:
+        stmt = (
+            select(DataCoverageReportRecord)
+            .order_by(
+                desc(DataCoverageReportRecord.created_at),
+                DataCoverageReportRecord.coverage_report_id,
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_data_coverage_report_from_record(record) for record in self.session.scalars(stmt)]
+
+    def save_data_gap(self, gap: DataGap) -> DataGap:
+        self.session.merge(_data_gap_to_record(gap))
+        self.session.flush()
+        return gap
+
+    def list_data_gaps(
+        self,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[DataGap]:
+        stmt = (
+            select(DataGapRecord)
+            .order_by(desc(DataGapRecord.detected_at), DataGapRecord.data_gap_id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_data_gap_from_record(record) for record in self.session.scalars(stmt)]
+
+    def save_data_retention_policy(
+        self,
+        policy: DataRetentionPolicy,
+    ) -> DataRetentionPolicy:
+        self.session.merge(_data_retention_policy_to_record(policy))
+        self.session.flush()
+        return policy
+
+    def list_data_retention_policies(
+        self,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[DataRetentionPolicy]:
+        stmt = (
+            select(DataRetentionPolicyRecord)
+            .order_by(DataRetentionPolicyRecord.policy_name, DataRetentionPolicyRecord.created_at)
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_data_retention_policy_from_record(record) for record in self.session.scalars(stmt)]
+
 
 def _metadata(value: dict[str, Any] | None) -> dict[str, Any]:
     return dict(value or {})
@@ -2948,6 +3224,394 @@ def _json_compatible(value: Any) -> Any:
 def _json_metadata(value: dict[str, Any] | None) -> dict[str, Any]:
     metadata = _json_compatible(dict(value or {}))
     return dict(metadata)
+
+
+def _market_universe_definition_to_record(
+    definition: MarketUniverseDefinition,
+) -> MarketUniverseDefinitionRecord:
+    return MarketUniverseDefinitionRecord(
+        universe_id=definition.universe_id,
+        universe_name=definition.universe_name,
+        universe_version=definition.universe_version,
+        created_at=definition.created_at,
+        is_active=definition.is_active,
+        venue_names=list(definition.venue_names),
+        categories=list(definition.categories),
+        market_statuses=list(definition.market_statuses),
+        market_types=list(definition.market_types),
+        include_market_ids=list(definition.include_market_ids),
+        exclude_market_ids=list(definition.exclude_market_ids),
+        title_include_patterns=list(definition.title_include_patterns),
+        title_exclude_patterns=list(definition.title_exclude_patterns),
+        min_market_data_quality_score=definition.min_market_data_quality_score,
+        min_liquidity_depth=definition.min_liquidity_depth,
+        metadata_json=_metadata(definition.metadata),
+    )
+
+
+def _market_universe_definition_from_record(
+    record: MarketUniverseDefinitionRecord,
+) -> MarketUniverseDefinition:
+    return MarketUniverseDefinition(
+        universe_id=record.universe_id,
+        universe_name=record.universe_name,
+        universe_version=record.universe_version,
+        created_at=record.created_at,
+        is_active=record.is_active,
+        venue_names=list(record.venue_names),
+        categories=list(record.categories),
+        market_statuses=list(record.market_statuses),
+        market_types=list(record.market_types),
+        include_market_ids=list(record.include_market_ids),
+        exclude_market_ids=list(record.exclude_market_ids),
+        title_include_patterns=list(record.title_include_patterns),
+        title_exclude_patterns=list(record.title_exclude_patterns),
+        min_market_data_quality_score=record.min_market_data_quality_score,
+        min_liquidity_depth=record.min_liquidity_depth,
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _market_universe_member_to_record(member: MarketUniverseMember) -> MarketUniverseMemberRecord:
+    return MarketUniverseMemberRecord(
+        universe_member_id=member.universe_member_id,
+        universe_id=member.universe_id,
+        market_id=member.market_id,
+        venue_id=member.venue_id,
+        venue_name=member.venue_name,
+        event_id=member.event_id,
+        added_at=member.added_at,
+        asof_timestamp=member.asof_timestamp,
+        inclusion_reason_codes=list(member.inclusion_reason_codes),
+        exclusion_reason_codes=list(member.exclusion_reason_codes),
+        metadata_json=_metadata(member.metadata),
+    )
+
+
+def _market_universe_member_from_record(record: MarketUniverseMemberRecord) -> MarketUniverseMember:
+    return MarketUniverseMember(
+        universe_member_id=record.universe_member_id,
+        universe_id=record.universe_id,
+        market_id=record.market_id,
+        venue_id=record.venue_id,
+        venue_name=record.venue_name,
+        event_id=record.event_id,
+        added_at=record.added_at,
+        asof_timestamp=record.asof_timestamp,
+        inclusion_reason_codes=list(record.inclusion_reason_codes),
+        exclusion_reason_codes=list(record.exclusion_reason_codes),
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _collection_plan_to_record(plan: CollectionPlan) -> CollectionPlanRecord:
+    return CollectionPlanRecord(
+        collection_plan_id=plan.collection_plan_id,
+        plan_name=plan.plan_name,
+        plan_version=plan.plan_version,
+        created_at=plan.created_at,
+        is_active=plan.is_active,
+        universe_id=plan.universe_id,
+        venue_names=list(plan.venue_names),
+        endpoint_types=list(plan.endpoint_types),
+        cadence_seconds=plan.cadence_seconds,
+        lookback_seconds=plan.lookback_seconds,
+        max_markets_per_run=plan.max_markets_per_run,
+        max_payloads_per_run=plan.max_payloads_per_run,
+        allow_network_default=plan.allow_network_default,
+        derive_market_data=plan.derive_market_data,
+        compute_quality=plan.compute_quality,
+        analyze_rules=plan.analyze_rules,
+        recompute_verdicts=plan.recompute_verdicts,
+        metadata_json=_metadata(plan.metadata),
+    )
+
+
+def _collection_plan_from_record(record: CollectionPlanRecord) -> CollectionPlan:
+    return CollectionPlan(
+        collection_plan_id=record.collection_plan_id,
+        plan_name=record.plan_name,
+        plan_version=record.plan_version,
+        created_at=record.created_at,
+        is_active=record.is_active,
+        universe_id=record.universe_id,
+        venue_names=list(record.venue_names),
+        endpoint_types=list(record.endpoint_types),
+        cadence_seconds=record.cadence_seconds,
+        lookback_seconds=record.lookback_seconds,
+        max_markets_per_run=record.max_markets_per_run,
+        max_payloads_per_run=record.max_payloads_per_run,
+        allow_network_default=record.allow_network_default,
+        derive_market_data=record.derive_market_data,
+        compute_quality=record.compute_quality,
+        analyze_rules=record.analyze_rules,
+        recompute_verdicts=record.recompute_verdicts,
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _collection_run_to_record(run: CollectionRun) -> CollectionRunRecord:
+    return CollectionRunRecord(
+        collection_run_id=run.collection_run_id,
+        collection_plan_id=run.collection_plan_id,
+        universe_id=run.universe_id,
+        created_at=run.created_at,
+        started_at=run.started_at,
+        completed_at=run.completed_at,
+        status=run.status.value,
+        mode=run.mode.value,
+        asof_timestamp=run.asof_timestamp,
+        allow_network=run.allow_network,
+        venue_names=list(run.venue_names),
+        market_ids=list(run.market_ids),
+        endpoint_types=list(run.endpoint_types),
+        payloads_archived=run.payloads_archived,
+        markets_processed=run.markets_processed,
+        price_snapshots_created=run.price_snapshots_created,
+        liquidity_snapshots_created=run.liquidity_snapshots_created,
+        quality_reports_created=run.quality_reports_created,
+        ingestion_runs_created=run.ingestion_runs_created,
+        errors_count=run.errors_count,
+        metadata_json=_metadata(run.metadata),
+    )
+
+
+def _collection_run_from_record(record: CollectionRunRecord) -> CollectionRun:
+    return CollectionRun(
+        collection_run_id=record.collection_run_id,
+        collection_plan_id=record.collection_plan_id,
+        universe_id=record.universe_id,
+        created_at=record.created_at,
+        started_at=record.started_at,
+        completed_at=record.completed_at,
+        status=CollectionRunStatus(record.status),
+        mode=CollectionRunMode(record.mode),
+        asof_timestamp=record.asof_timestamp,
+        allow_network=record.allow_network,
+        venue_names=list(record.venue_names),
+        market_ids=list(record.market_ids),
+        endpoint_types=list(record.endpoint_types),
+        payloads_archived=record.payloads_archived,
+        markets_processed=record.markets_processed,
+        price_snapshots_created=record.price_snapshots_created,
+        liquidity_snapshots_created=record.liquidity_snapshots_created,
+        quality_reports_created=record.quality_reports_created,
+        ingestion_runs_created=record.ingestion_runs_created,
+        errors_count=record.errors_count,
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _backfill_job_to_record(job: BackfillJob) -> BackfillJobRecord:
+    return BackfillJobRecord(
+        backfill_job_id=job.backfill_job_id,
+        job_name=job.job_name,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+        status=job.status.value,
+        venue_name=job.venue_name,
+        market_ids=list(job.market_ids),
+        endpoint_types=list(job.endpoint_types),
+        start_time=job.start_time,
+        end_time=job.end_time,
+        interval_seconds=job.interval_seconds,
+        allow_network=job.allow_network,
+        max_segments=job.max_segments,
+        segments_created=job.segments_created,
+        segments_completed=job.segments_completed,
+        segments_failed=job.segments_failed,
+        metadata_json=_metadata(job.metadata),
+    )
+
+
+def _backfill_job_from_record(record: BackfillJobRecord) -> BackfillJob:
+    return BackfillJob(
+        backfill_job_id=record.backfill_job_id,
+        job_name=record.job_name,
+        created_at=record.created_at,
+        started_at=record.started_at,
+        completed_at=record.completed_at,
+        status=BackfillJobStatus(record.status),
+        venue_name=record.venue_name,
+        market_ids=list(record.market_ids),
+        endpoint_types=list(record.endpoint_types),
+        start_time=record.start_time,
+        end_time=record.end_time,
+        interval_seconds=record.interval_seconds,
+        allow_network=record.allow_network,
+        max_segments=record.max_segments,
+        segments_created=record.segments_created,
+        segments_completed=record.segments_completed,
+        segments_failed=record.segments_failed,
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _backfill_segment_to_record(segment: BackfillSegment) -> BackfillSegmentRecord:
+    return BackfillSegmentRecord(
+        backfill_segment_id=segment.backfill_segment_id,
+        backfill_job_id=segment.backfill_job_id,
+        venue_name=segment.venue_name,
+        market_id=segment.market_id,
+        endpoint_type=segment.endpoint_type,
+        segment_start_time=segment.segment_start_time,
+        segment_end_time=segment.segment_end_time,
+        status=segment.status.value,
+        supported=segment.supported,
+        unsupported_reason=segment.unsupported_reason,
+        payloads_archived=segment.payloads_archived,
+        snapshots_created=segment.snapshots_created,
+        errors_count=segment.errors_count,
+        metadata_json=_metadata(segment.metadata),
+    )
+
+
+def _backfill_segment_from_record(record: BackfillSegmentRecord) -> BackfillSegment:
+    return BackfillSegment(
+        backfill_segment_id=record.backfill_segment_id,
+        backfill_job_id=record.backfill_job_id,
+        venue_name=record.venue_name,
+        market_id=record.market_id,
+        endpoint_type=record.endpoint_type,
+        segment_start_time=record.segment_start_time,
+        segment_end_time=record.segment_end_time,
+        status=BackfillSegmentStatus(record.status),
+        supported=record.supported,
+        unsupported_reason=record.unsupported_reason,
+        payloads_archived=record.payloads_archived,
+        snapshots_created=record.snapshots_created,
+        errors_count=record.errors_count,
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _data_coverage_report_to_record(report: DataCoverageReport) -> DataCoverageReportRecord:
+    return DataCoverageReportRecord(
+        coverage_report_id=report.coverage_report_id,
+        asof_timestamp=report.asof_timestamp,
+        created_at=report.created_at,
+        scope_type=report.scope_type.value,
+        universe_id=report.universe_id,
+        market_id=report.market_id,
+        venue_name=report.venue_name,
+        start_time=report.start_time,
+        end_time=report.end_time,
+        total_markets=report.total_markets,
+        markets_with_rules=report.markets_with_rules,
+        markets_with_orderbooks=report.markets_with_orderbooks,
+        markets_with_price_snapshots=report.markets_with_price_snapshots,
+        markets_with_liquidity_snapshots=report.markets_with_liquidity_snapshots,
+        markets_with_quality_reports=report.markets_with_quality_reports,
+        stale_markets=report.stale_markets,
+        missing_rule_markets=report.missing_rule_markets,
+        missing_price_markets=report.missing_price_markets,
+        missing_liquidity_markets=report.missing_liquidity_markets,
+        average_quality_score=report.average_quality_score,
+        coverage_score=report.coverage_score,
+        reason_codes=list(report.reason_codes),
+        metadata_json=_metadata(report.metadata),
+    )
+
+
+def _data_coverage_report_from_record(record: DataCoverageReportRecord) -> DataCoverageReport:
+    return DataCoverageReport(
+        coverage_report_id=record.coverage_report_id,
+        asof_timestamp=record.asof_timestamp,
+        created_at=record.created_at,
+        scope_type=CoverageScopeType(record.scope_type),
+        universe_id=record.universe_id,
+        market_id=record.market_id,
+        venue_name=record.venue_name,
+        start_time=record.start_time,
+        end_time=record.end_time,
+        total_markets=record.total_markets,
+        markets_with_rules=record.markets_with_rules,
+        markets_with_orderbooks=record.markets_with_orderbooks,
+        markets_with_price_snapshots=record.markets_with_price_snapshots,
+        markets_with_liquidity_snapshots=record.markets_with_liquidity_snapshots,
+        markets_with_quality_reports=record.markets_with_quality_reports,
+        stale_markets=record.stale_markets,
+        missing_rule_markets=record.missing_rule_markets,
+        missing_price_markets=record.missing_price_markets,
+        missing_liquidity_markets=record.missing_liquidity_markets,
+        average_quality_score=record.average_quality_score,
+        coverage_score=record.coverage_score,
+        reason_codes=list(record.reason_codes),
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _data_gap_to_record(gap: DataGap) -> DataGapRecord:
+    return DataGapRecord(
+        data_gap_id=gap.data_gap_id,
+        coverage_report_id=gap.coverage_report_id,
+        market_id=gap.market_id,
+        venue_name=gap.venue_name,
+        gap_type=gap.gap_type.value,
+        severity=gap.severity.value,
+        start_time=gap.start_time,
+        end_time=gap.end_time,
+        detected_at=gap.detected_at,
+        expected_cadence_seconds=gap.expected_cadence_seconds,
+        observed_count=gap.observed_count,
+        expected_count=gap.expected_count,
+        reason_code=gap.reason_code,
+        description=gap.description,
+        metadata_json=_metadata(gap.metadata),
+    )
+
+
+def _data_gap_from_record(record: DataGapRecord) -> DataGap:
+    return DataGap(
+        data_gap_id=record.data_gap_id,
+        coverage_report_id=record.coverage_report_id,
+        market_id=record.market_id,
+        venue_name=record.venue_name,
+        gap_type=DataGapType(record.gap_type),
+        severity=DataGapSeverity(record.severity),
+        start_time=record.start_time,
+        end_time=record.end_time,
+        detected_at=record.detected_at,
+        expected_cadence_seconds=record.expected_cadence_seconds,
+        observed_count=record.observed_count,
+        expected_count=record.expected_count,
+        reason_code=record.reason_code,
+        description=record.description,
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _data_retention_policy_to_record(policy: DataRetentionPolicy) -> DataRetentionPolicyRecord:
+    return DataRetentionPolicyRecord(
+        retention_policy_id=policy.retention_policy_id,
+        policy_name=policy.policy_name,
+        created_at=policy.created_at,
+        is_active=policy.is_active,
+        raw_payload_retention_days=policy.raw_payload_retention_days,
+        orderbook_snapshot_retention_days=policy.orderbook_snapshot_retention_days,
+        price_snapshot_retention_days=policy.price_snapshot_retention_days,
+        liquidity_snapshot_retention_days=policy.liquidity_snapshot_retention_days,
+        quality_report_retention_days=policy.quality_report_retention_days,
+        archive_before_delete=policy.archive_before_delete,
+        metadata_json=_metadata(policy.metadata),
+    )
+
+
+def _data_retention_policy_from_record(record: DataRetentionPolicyRecord) -> DataRetentionPolicy:
+    return DataRetentionPolicy(
+        retention_policy_id=record.retention_policy_id,
+        policy_name=record.policy_name,
+        created_at=record.created_at,
+        is_active=record.is_active,
+        raw_payload_retention_days=record.raw_payload_retention_days,
+        orderbook_snapshot_retention_days=record.orderbook_snapshot_retention_days,
+        price_snapshot_retention_days=record.price_snapshot_retention_days,
+        liquidity_snapshot_retention_days=record.liquidity_snapshot_retention_days,
+        quality_report_retention_days=record.quality_report_retention_days,
+        archive_before_delete=record.archive_before_delete,
+        metadata=_metadata(record.metadata_json),
+    )
 
 
 def _venue_to_record(venue: Venue) -> VenueRecord:

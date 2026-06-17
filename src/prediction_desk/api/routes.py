@@ -19,6 +19,27 @@ from prediction_desk.api.schemas import (
     VersionResponse,
 )
 from prediction_desk.config import Settings
+from prediction_desk.dataops.models import (
+    BackfillJob,
+    BackfillJobCreateRequest,
+    BackfillJobResult,
+    BackfillSegment,
+    CollectionPlan,
+    CollectionRun,
+    CollectionRunResult,
+    DataCoverageComputeRequest,
+    DataCoverageReport,
+    DataGap,
+    DataGapDetectRequest,
+    DataOpsCollectionRunRequest,
+    DataOpsCycleConfig,
+    DataOpsCycleRequest,
+    DataOpsCycleResult,
+    MarketUniverseDefinition,
+    MarketUniverseMember,
+)
+from prediction_desk.dataops.runner import run_dataops_cycle
+from prediction_desk.dataops.service import DataOpsService, DataOpsServiceError
 from prediction_desk.divergence.enums import DivergenceStatus
 from prediction_desk.divergence.models import (
     CrossVenueDivergenceAnalysis,
@@ -2243,6 +2264,307 @@ def get_scenario_run_summary(
 
 
 @v1_router.post(
+    "/dataops/defaults",
+    response_model=dict[str, list[MarketUniverseDefinition] | list[CollectionPlan]],
+    dependencies=[Depends(require_api_token)],
+)
+def setup_dataops_defaults(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> dict[str, list[MarketUniverseDefinition] | list[CollectionPlan]]:
+    return DataOpsService(repo).setup_default_dataops_objects()
+
+
+@v1_router.get(
+    "/dataops/universes",
+    response_model=list[MarketUniverseDefinition],
+    dependencies=[Depends(require_api_token)],
+)
+def list_dataops_universes(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[MarketUniverseDefinition]:
+    return DataOpsService(repo).list_market_universes(limit=limit, offset=offset)
+
+
+@v1_router.post(
+    "/dataops/universes/{universe_id}/build",
+    response_model=list[MarketUniverseMember],
+    dependencies=[Depends(require_api_token)],
+)
+def build_dataops_universe(
+    universe_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    asof_timestamp: datetime | None = None,
+    force: bool = False,
+) -> list[MarketUniverseMember]:
+    try:
+        return DataOpsService(repo).build_universe(
+            universe_id,
+            asof_timestamp or datetime.now(tz=UTC),
+            force=force,
+        )
+    except DataOpsServiceError as exc:
+        raise _dataops_http_error(exc) from exc
+
+
+@v1_router.get(
+    "/dataops/universes/{universe_id}/members",
+    response_model=list[MarketUniverseMember],
+    dependencies=[Depends(require_api_token)],
+)
+def list_dataops_universe_members(
+    universe_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[MarketUniverseMember]:
+    return DataOpsService(repo).list_universe_members(
+        universe_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@v1_router.get(
+    "/dataops/collection-plans",
+    response_model=list[CollectionPlan],
+    dependencies=[Depends(require_api_token)],
+)
+def list_dataops_collection_plans(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[CollectionPlan]:
+    return DataOpsService(repo).list_collection_plans(limit=limit, offset=offset)
+
+
+@v1_router.post(
+    "/dataops/collection/run-once",
+    response_model=CollectionRunResult,
+    dependencies=[Depends(require_api_token)],
+)
+def run_dataops_collection_once(
+    request_body: DataOpsCollectionRunRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> CollectionRunResult:
+    try:
+        return DataOpsService(repo).run_collection_once(
+            plan_id=request_body.plan_id,
+            universe_id=request_body.universe_id,
+            venue_names=request_body.venue_names,
+            market_ids=request_body.market_ids,
+            endpoint_types=request_body.endpoint_types,
+            mode=request_body.mode.value,
+            allow_network=request_body.allow_network,
+            asof_timestamp=request_body.asof_timestamp or datetime.now(tz=UTC),
+            max_payloads=request_body.max_payloads,
+            metadata=request_body.metadata,
+        )
+    except DataOpsServiceError as exc:
+        raise _dataops_http_error(exc) from exc
+
+
+@v1_router.get(
+    "/dataops/collection-runs",
+    response_model=list[CollectionRun],
+    dependencies=[Depends(require_api_token)],
+)
+def list_dataops_collection_runs(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[CollectionRun]:
+    return DataOpsService(repo).list_collection_runs(limit=limit, offset=offset)
+
+
+@v1_router.get(
+    "/dataops/collection-runs/{collection_run_id}",
+    response_model=CollectionRun,
+    dependencies=[Depends(require_api_token)],
+)
+def get_dataops_collection_run(
+    collection_run_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> CollectionRun:
+    try:
+        return DataOpsService(repo).get_collection_run(collection_run_id)
+    except DataOpsServiceError as exc:
+        raise _dataops_http_error(exc) from exc
+
+
+@v1_router.post(
+    "/dataops/backfill/jobs",
+    response_model=BackfillJob,
+    dependencies=[Depends(require_api_token)],
+)
+def create_dataops_backfill_job(
+    request_body: BackfillJobCreateRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> BackfillJob:
+    try:
+        return DataOpsService(repo).create_backfill_job(
+            venue_name=request_body.venue_name,
+            endpoint_types=request_body.endpoint_types,
+            start_time=request_body.start_time,
+            end_time=request_body.end_time,
+            market_ids=request_body.market_ids,
+            job_name=request_body.job_name,
+            interval_seconds=request_body.interval_seconds,
+            allow_network=request_body.allow_network,
+            max_segments=request_body.max_segments,
+            metadata=request_body.metadata,
+        )
+    except DataOpsServiceError as exc:
+        raise _dataops_http_error(exc) from exc
+
+
+@v1_router.post(
+    "/dataops/backfill/jobs/{backfill_job_id}/run",
+    response_model=BackfillJobResult,
+    dependencies=[Depends(require_api_token)],
+)
+def run_dataops_backfill_job(
+    backfill_job_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    force: bool = False,
+) -> BackfillJobResult:
+    try:
+        return DataOpsService(repo).run_backfill_job(backfill_job_id, force=force)
+    except DataOpsServiceError as exc:
+        raise _dataops_http_error(exc) from exc
+
+
+@v1_router.get(
+    "/dataops/backfill/jobs",
+    response_model=list[BackfillJob],
+    dependencies=[Depends(require_api_token)],
+)
+def list_dataops_backfill_jobs(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[BackfillJob]:
+    return DataOpsService(repo).list_backfill_jobs(limit=limit, offset=offset)
+
+
+@v1_router.get(
+    "/dataops/backfill/jobs/{backfill_job_id}",
+    response_model=BackfillJob,
+    dependencies=[Depends(require_api_token)],
+)
+def get_dataops_backfill_job(
+    backfill_job_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> BackfillJob:
+    try:
+        return DataOpsService(repo).get_backfill_job(backfill_job_id)
+    except DataOpsServiceError as exc:
+        raise _dataops_http_error(exc) from exc
+
+
+@v1_router.get(
+    "/dataops/backfill/jobs/{backfill_job_id}/segments",
+    response_model=list[BackfillSegment],
+    dependencies=[Depends(require_api_token)],
+)
+def list_dataops_backfill_segments(
+    backfill_job_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[BackfillSegment]:
+    return DataOpsService(repo).list_backfill_segments(
+        backfill_job_id=backfill_job_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@v1_router.post(
+    "/dataops/coverage/compute",
+    response_model=DataCoverageReport,
+    dependencies=[Depends(require_api_token)],
+)
+def compute_dataops_coverage(
+    request_body: DataCoverageComputeRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> DataCoverageReport:
+    return DataOpsService(repo).compute_coverage_report(
+        scope_type=request_body.scope_type,
+        universe_id=request_body.universe_id,
+        market_id=request_body.market_id,
+        venue_name=request_body.venue_name,
+        asof_timestamp=request_body.asof_timestamp or datetime.now(tz=UTC),
+        start_time=request_body.start_time,
+        end_time=request_body.end_time,
+    )
+
+
+@v1_router.get(
+    "/dataops/coverage",
+    response_model=list[DataCoverageReport],
+    dependencies=[Depends(require_api_token)],
+)
+def list_dataops_coverage(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[DataCoverageReport]:
+    return DataOpsService(repo).list_coverage_reports(limit=limit, offset=offset)
+
+
+@v1_router.post(
+    "/dataops/gaps/detect",
+    response_model=list[DataGap],
+    dependencies=[Depends(require_api_token)],
+)
+def detect_dataops_gaps(
+    request_body: DataGapDetectRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> list[DataGap]:
+    return DataOpsService(repo).detect_gaps(
+        scope_type=request_body.scope_type,
+        universe_id=request_body.universe_id,
+        market_id=request_body.market_id,
+        venue_name=request_body.venue_name,
+        asof_timestamp=request_body.asof_timestamp or datetime.now(tz=UTC),
+        expected_cadence_seconds=request_body.expected_cadence_seconds,
+    )
+
+
+@v1_router.get(
+    "/dataops/gaps",
+    response_model=list[DataGap],
+    dependencies=[Depends(require_api_token)],
+)
+def list_dataops_gaps(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[DataGap]:
+    return DataOpsService(repo).list_data_gaps(limit=limit, offset=offset)
+
+
+@v1_router.post(
+    "/dataops/cycle",
+    response_model=DataOpsCycleResult,
+    dependencies=[Depends(require_api_token)],
+)
+def run_dataops_cycle_endpoint(
+    request_body: DataOpsCycleRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> DataOpsCycleResult:
+    config = DataOpsCycleConfig(
+        **{
+            **request_body.model_dump(),
+            "asof_timestamp": request_body.asof_timestamp or datetime.now(tz=UTC),
+        }
+    )
+    return run_dataops_cycle(config, repo=repo)
+
+
+@v1_router.post(
     "/research/strategies/default",
     response_model=list[ResearchStrategyDefinition],
     dependencies=[Depends(require_api_token)],
@@ -2750,3 +3072,23 @@ def _scenario_run_http_error(exc: ScenarioRunError) -> HTTPException:
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail=exc.code,
     )
+
+
+def _dataops_http_error(exc: DataOpsServiceError) -> HTTPException:
+    if exc.code in {
+        "backfill_job_not_found",
+        "collection_plan_not_found",
+        "collection_run_not_found",
+        "market_universe_not_found",
+    }:
+        status_code = status.HTTP_404_NOT_FOUND
+    elif exc.code in {
+        "invalid_backfill_time_range",
+        "missing_backfill_endpoint_types",
+        "public_network_disabled",
+        "unsupported_venue",
+    }:
+        status_code = status.HTTP_400_BAD_REQUEST
+    else:
+        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    return HTTPException(status_code=status_code, detail=exc.code)
