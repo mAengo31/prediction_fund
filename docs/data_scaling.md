@@ -55,10 +55,27 @@ visible before `available_at`. Tests cover the case where `observed_at < T` but
 ## Modes
 
 Fixture mode is deterministic and network-free. It is used by tests, CI, and smoke
-scripts.
+scripts, including staging smoke:
+
+```bash
+API_BASE_URL="https://your-staging-api.example.com" \
+PREDICTION_DESK_API_TOKEN="..." \
+scripts/staging_smoke.sh
+```
 
 Manual public fetch mode is explicit, read-only, GET-oriented, credential-free, and must
-be called with `allow_network=true`. Tests do not use this mode.
+be called with `allow_network=true`. Tests do not use this mode. The staging pilot script
+adds a second operator gate, refuses to run unless `CONFIRM_PUBLIC_READ_ONLY=true`, and
+caps `MAX_PAYLOADS` at 10:
+
+```bash
+API_BASE_URL="https://your-staging-api.example.com" \
+PREDICTION_DESK_API_TOKEN="..." \
+CONFIRM_PUBLIC_READ_ONLY=true \
+PUBLIC_READ_VENUES=kalshi \
+MAX_PAYLOADS=5 \
+scripts/staging_public_read_pilot.sh
+```
 
 ## CLI
 
@@ -112,6 +129,10 @@ prediction-desk dataops-cycle --mode FIXTURE
 
 For a manual public collection job, pass `--allow-network` explicitly. Do not provide
 credentials; none are required or accepted.
+
+For staging operations, prefer the runbook in
+[staging_dataops_pilot.md](staging_dataops_pilot.md). It covers migrations, fixture smoke,
+public-read approval, database count inspection, coverage/gap readback, and rollback.
 
 ## Research Use
 

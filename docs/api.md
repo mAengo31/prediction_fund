@@ -187,6 +187,18 @@ Common API failures use this envelope:
 | `POST` | `/api/v1/ingestion/run-once` | Configurable | Run one fixture or explicit read-only public ingestion job. |
 | `GET` | `/api/v1/venue-mappings` | Configurable | List external-to-canonical venue mappings. |
 
+## Staging DataOps Validation
+
+Use `scripts/staging_smoke.sh` against a token-protected staging API to validate health,
+readiness, market readback, DataOps defaults, fixture collection, coverage, and gaps. Set
+`API_BASE_URL`; set `PREDICTION_DESK_API_TOKEN` when auth is enabled. The script adds the
+bearer header without printing the token.
+
+Use `scripts/staging_public_read_pilot.sh` only for an explicitly approved public-read
+sample. It requires `CONFIRM_PUBLIC_READ_ONLY=true`, `PREDICTION_DESK_API_TOKEN`, and a
+small `MAX_PAYLOADS` value. It calls only DataOps collection in `MANUAL_PUBLIC_FETCH` mode
+with `allow_network=true`, then reads the collection run, coverage, and gaps.
+
 ## Local Examples
 
 Start the API locally:

@@ -289,7 +289,11 @@ prediction-desk dataops-cycle --mode FIXTURE
 Manual public sampling is opt-in and read-only:
 
 ```bash
-prediction-desk ingest-public-sample --venue kalshi --allow-network
+prediction-desk dataops-run-collection \
+  --venue kalshi \
+  --mode MANUAL_PUBLIC_FETCH \
+  --allow-network \
+  --max-payloads 5
 ```
 
 Use a custom database URL:
@@ -354,6 +358,9 @@ curl -X POST \
 
 Authentication is controlled by `REQUIRE_API_TOKEN` and `PREDICTION_DESK_API_TOKEN`.
 `/healthz` is always public. In staging and production, set `REQUIRE_API_TOKEN=true`.
+Use `scripts/staging_smoke.sh` for fixture-only staging validation and
+`scripts/staging_public_read_pilot.sh` only after explicitly setting
+`CONFIRM_PUBLIC_READ_ONLY=true`.
 
 See [docs/api.md](docs/api.md) for endpoint details and
 [docs/resolution_corpus.md](docs/resolution_corpus.md) for rule-analysis details. See
@@ -372,6 +379,8 @@ intent-only admissibility checks and abstract exposure gating. See
 [docs/scenario_features.md](docs/scenario_features.md) for fixture-backed slow-lane
 scenario features and research/replay metadata. See [docs/data_scaling.md](docs/data_scaling.md)
 for market universes, collection plans, backfill jobs, coverage reports, and gap detection.
+See [docs/staging_dataops_pilot.md](docs/staging_dataops_pilot.md) for staging smoke,
+public-read pilot, database inspection, coverage/gap readback, and rollback guidance.
 
 ## Docker Compose Quickstart
 

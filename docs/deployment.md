@@ -150,6 +150,41 @@ Staging settings:
 Use the safe template in [../deploy/render.yaml](../deploy/render.yaml) as a starting point.
 It contains placeholders only; configure secrets in the hosting platform.
 
+Run migrations against staging before smoke:
+
+```bash
+DATABASE_URL="postgresql+psycopg://..." scripts/migrate.sh
+```
+
+Run fixture-only staging smoke without printing secrets:
+
+```bash
+API_BASE_URL="https://your-staging-api.example.com" \
+PREDICTION_DESK_API_TOKEN="..." \
+scripts/staging_smoke.sh
+```
+
+Run the tiny public-read pilot only after explicit approval:
+
+```bash
+API_BASE_URL="https://your-staging-api.example.com" \
+PREDICTION_DESK_API_TOKEN="..." \
+CONFIRM_PUBLIC_READ_ONLY=true \
+PUBLIC_READ_VENUES=kalshi \
+MAX_PAYLOADS=5 \
+scripts/staging_public_read_pilot.sh
+```
+
+Inspect staging counts without mutating state:
+
+```bash
+DATABASE_URL="postgresql+psycopg://..." python scripts/inspect_db_counts.py
+```
+
+Use managed Postgres with backups enabled before public-read pilots. The pilot script sends
+no venue credentials and refuses to run unless `CONFIRM_PUBLIC_READ_ONLY=true`. See
+[staging_dataops_pilot.md](staging_dataops_pilot.md) for the full operational runbook.
+
 ## D. Production Research Deployment Target
 
 The production research target should be:

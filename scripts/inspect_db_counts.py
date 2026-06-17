@@ -16,6 +16,7 @@ TABLES: tuple[str, ...] = (
     "events",
     "markets",
     "outcomes",
+    "raw_venue_payloads",
     "market_rule_snapshots",
     "resolution_predicates",
     "ambiguity_assessments",
@@ -38,6 +39,15 @@ TABLES: tuple[str, ...] = (
     "research_decision_traces",
     "research_runs",
     "replay_runs",
+    "market_universe_definitions",
+    "market_universe_members",
+    "collection_plans",
+    "collection_runs",
+    "backfill_jobs",
+    "backfill_segments",
+    "data_coverage_reports",
+    "data_gaps",
+    "data_retention_policies",
 )
 
 
