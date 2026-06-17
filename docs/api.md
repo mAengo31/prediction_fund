@@ -4,8 +4,9 @@ The `prediction-desk` API is an internal research API. It exposes stored predict
 artifacts, deterministic resolution-corpus analysis, deterministic trust-verdict scoring,
 point-in-time replay, canonical market data, fast-lane integrity assessments, contract
 equivalence, equivalence-gated divergence context, pre-trade admissibility,
-simulated-only paper execution, and deterministic strategy research. It does not trade,
-place real orders, connect to venues, calculate real PnL, or call external APIs.
+simulated-only paper execution, deterministic strategy research, and local-only scenario
+feature imports. It does not trade, place real orders, connect to venues, calculate real
+PnL, or call external APIs.
 
 Market and trust-verdict routes are versioned under `/api/v1`. Operational routes remain
 unversioned.
@@ -126,6 +127,19 @@ Common API failures use this envelope:
 | `GET` | `/api/v1/paper/runs` | Configurable | List simulated paper runs. |
 | `GET` | `/api/v1/paper/runs/{simulation_run_id}` | Configurable | Read one simulated paper run. |
 | `GET` | `/api/v1/paper/runs/{simulation_run_id}/summary` | Configurable | Read one simulated paper run summary. |
+| `POST` | `/api/v1/scenario/seeds/build` | Configurable | Build one as-of scenario seed bundle. |
+| `GET` | `/api/v1/markets/{market_id}/scenario/seed/latest` | Configurable | Latest scenario seed bundle as of now or a supplied timestamp. |
+| `POST` | `/api/v1/scenario/specs` | Configurable | Store a scenario spec record without executing it. |
+| `POST` | `/api/v1/scenario/import-fixtures` | Configurable | Import local scenario fixture JSON artifacts. |
+| `POST` | `/api/v1/scenario/import-manual` | Configurable | Import one local manual scenario JSON artifact. |
+| `POST` | `/api/v1/scenario/artifacts/{scenario_artifact_id}/normalize` | Configurable | Normalize one scenario artifact into a feature snapshot. |
+| `GET` | `/api/v1/scenario/artifacts` | Configurable | List imported scenario artifacts. |
+| `GET` | `/api/v1/scenario/features` | Configurable | List normalized scenario feature snapshots. |
+| `GET` | `/api/v1/markets/{market_id}/scenario/latest` | Configurable | Latest scenario feature as of now or a supplied timestamp. |
+| `POST` | `/api/v1/scenario/runs` | Configurable | Run a synchronous scenario seed/import/normalization batch. |
+| `GET` | `/api/v1/scenario/runs` | Configurable | List scenario runs. |
+| `GET` | `/api/v1/scenario/runs/{scenario_run_id}` | Configurable | Read one scenario run. |
+| `GET` | `/api/v1/scenario/runs/{scenario_run_id}/summary` | Configurable | Read one scenario run summary. |
 | `POST` | `/api/v1/research/strategies/default` | Configurable | Create deterministic default research strategies if missing. |
 | `GET` | `/api/v1/research/strategies` | Configurable | List research strategy definitions. |
 | `GET` | `/api/v1/research/strategies/{strategy_id}` | Configurable | Read one research strategy definition. |

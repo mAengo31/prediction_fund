@@ -31,6 +31,9 @@ verdicts are represented as replayable snapshots.
 - Strategy Research Harness v1 for deterministic hypothesis testing, research signals,
   hypothetical intent proposals, pre-trade evaluation, optional paper simulation, and
   simulated attribution summaries.
+- Slow-Lane Scenario Feature Interface v1 for fixture-backed MiroFish-style report import,
+  scenario seed bundles, normalized scenario feature snapshots, and research/replay
+  metadata exposure.
 - A deterministic v0 resolution-risk scorer.
 - A deterministic v0 trust-verdict builder.
 - SQLAlchemy 2.0 ORM mappings and repository methods for local persistence.
@@ -253,6 +256,21 @@ prediction-desk research-run \
   --no-paper-simulation
 ```
 
+Import slow-lane scenario features:
+
+```bash
+prediction-desk scenario-build-seed \
+  --market-id mkt_sfo_rain_2026_09_01 \
+  --asof 2026-06-16T12:00:00+00:00
+prediction-desk scenario-import-fixtures \
+  --market-id mkt_sfo_rain_2026_09_01 \
+  --asof 2026-06-16T12:00:00+00:00
+prediction-desk scenario-latest --market-id mkt_sfo_rain_2026_09_01
+prediction-desk scenario-run \
+  --market-id mkt_sfo_rain_2026_09_01 \
+  --asof 2026-06-16T12:00:00+00:00
+```
+
 Manual public sampling is opt-in and read-only:
 
 ```bash
@@ -335,7 +353,9 @@ outcome mappings, comparison permissions, and equivalence run-once scans. See
 [docs/divergence_signals.md](docs/divergence_signals.md) for equivalence-gated
 cross-venue divergence context. See [docs/pretrade_gate.md](docs/pretrade_gate.md) for
 intent-only admissibility checks and abstract exposure gating. See
-[docs/paper_execution.md](docs/paper_execution.md) for simulated-only paper execution.
+[docs/paper_execution.md](docs/paper_execution.md) for simulated-only paper execution. See
+[docs/scenario_features.md](docs/scenario_features.md) for fixture-backed slow-lane
+scenario features and research/replay metadata.
 
 ## Docker Compose Quickstart
 

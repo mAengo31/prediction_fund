@@ -233,6 +233,47 @@ PY
 )"
 paper_run_summary="$(curl_json GET "${API_BASE_URL}/api/v1/paper/runs/${paper_run_id}/summary")"
 research_strategies="$(curl_json POST "${API_BASE_URL}/api/v1/research/strategies/default")"
+scenario_seed="$(
+  curl -fsS -X POST "${API_BASE_URL}/api/v1/scenario/seeds/build" \
+    -H "Content-Type: application/json" \
+    -d "{\"market_id\":\"${MARKET_ID}\",\"asof_timestamp\":\"2026-06-16T12:00:00Z\",\"force\":false}"
+)" || fail "POST ${API_BASE_URL}/api/v1/scenario/seeds/build"
+scenario_artifacts="$(
+  curl -fsS -X POST "${API_BASE_URL}/api/v1/scenario/import-fixtures" \
+    -H "Content-Type: application/json" \
+    -d "{\"market_ids\":[\"${MARKET_ID}\"],\"asof_timestamp\":\"2026-06-16T12:00:00Z\",\"force\":false}"
+)" || fail "POST ${API_BASE_URL}/api/v1/scenario/import-fixtures"
+scenario_artifact_id="$(python - "$scenario_seed" "$scenario_artifacts" <<'PY'
+import json
+import sys
+
+seed = json.loads(sys.argv[1])
+artifacts = json.loads(sys.argv[2])
+assert seed["seed_bundle_id"], seed
+assert artifacts, artifacts
+print(artifacts[0]["scenario_artifact_id"])
+PY
+)"
+scenario_feature="$(
+  curl_json POST "${API_BASE_URL}/api/v1/scenario/artifacts/${scenario_artifact_id}/normalize"
+)"
+scenario_latest="$(
+  curl_json GET "${API_BASE_URL}/api/v1/markets/${MARKET_ID}/scenario/latest?asof_timestamp=2026-06-16T12:00:00Z"
+)"
+scenario_run="$(
+  curl -fsS -X POST "${API_BASE_URL}/api/v1/scenario/runs" \
+    -H "Content-Type: application/json" \
+    -d "{\"name\":\"docker smoke scenario\",\"asof_timestamp\":\"2026-06-16T12:00:00Z\",\"market_ids\":[\"${MARKET_ID}\"],\"mode\":\"IMPORT_FIXTURES\",\"max_items\":10,\"force\":false,\"metadata\":{}}"
+)" || fail "POST ${API_BASE_URL}/api/v1/scenario/runs"
+python - "$scenario_feature" "$scenario_latest" "$scenario_run" <<'PY'
+import json
+import sys
+
+feature, latest, run = (json.loads(arg) for arg in sys.argv[1:])
+assert feature["scenario_feature_snapshot_id"], feature
+assert latest["scenario_feature_snapshot_id"] == feature["scenario_feature_snapshot_id"], latest
+assert run["summary"]["total_features"] >= 1, run
+PY
 research_features="$(
   curl -fsS -X POST "${API_BASE_URL}/api/v1/research/features/build" \
     -H "Content-Type: application/json" \
@@ -241,7 +282,7 @@ research_features="$(
 research_signals="$(
   curl -fsS -X POST "${API_BASE_URL}/api/v1/research/signals/generate" \
     -H "Content-Type: application/json" \
-    -d "{\"market_id\":\"${MARKET_ID}\",\"asof_timestamp\":\"2026-06-16T12:00:00Z\"}"
+    -d "{\"market_id\":\"${MARKET_ID}\",\"asof_timestamp\":\"2026-06-16T12:00:00Z\",\"strategy_ids\":[\"research_strategy_scenario_context_research_v1\"]}"
 )" || fail "POST ${API_BASE_URL}/api/v1/research/signals/generate"
 research_proposals="$(
   curl -fsS -X POST "${API_BASE_URL}/api/v1/research/proposals/generate" \
@@ -525,6 +566,7 @@ assert any(
     and step["metadata"].get("latest_research_signal_ids")
     and step["metadata"].get("latest_research_proposal_ids")
     and step["metadata"].get("latest_research_trace_ids")
+    and step["metadata"].get("latest_scenario_feature_snapshot_id")
     for step in replay_steps
 ), replay_steps
 assert integrity_replay["run"]["policy_name"] == "integrity_gate_v1", integrity_replay
@@ -535,4 +577,4 @@ assert any(
 ), pretrade_replay_steps
 PY
 
-echo "Docker smoke passed for ${COMPOSE_PROJECT_NAME}: healthz, readyz, ingestion, market data, quality, integrity, equivalence, divergence, pretrade, paper, research, verdict, and replay succeeded."
+echo "Docker smoke passed for ${COMPOSE_PROJECT_NAME}: healthz, readyz, ingestion, market data, quality, integrity, equivalence, divergence, pretrade, paper, scenario, research, verdict, and replay succeeded."

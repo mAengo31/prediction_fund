@@ -42,6 +42,7 @@ from prediction_desk.research.models import (
 )
 from prediction_desk.resolution.models import ResolutionAnalysis
 from prediction_desk.resolution.service import ResolutionCorpusError, ResolutionCorpusService
+from prediction_desk.scenario.models import ScenarioFeatureSnapshot
 from prediction_desk.scoring.trust_verdict import build_trust_verdict
 
 RUNNER_VERSION = "replay_runner_v1"
@@ -229,6 +230,10 @@ def _run_step(
             asof_timestamp=asof_timestamp,
             limit=500,
         )
+        scenario_feature = repo.get_latest_scenario_feature_asof(
+            market.market_id,
+            asof_timestamp,
+        )
         trust_verdict = _trust_verdict_asof(
             repo=repo,
             market=market,
@@ -270,6 +275,7 @@ def _run_step(
             research_signals=research_signals,
             research_proposals=research_proposals,
             research_traces=research_traces,
+            scenario_feature=scenario_feature,
             trust_verdict=trust_verdict,
             decision=decision,
             error_code=None,
@@ -403,6 +409,7 @@ def _step_from_decision(
     research_signals: list[ResearchSignal],
     research_proposals: list[ResearchIntentProposal],
     research_traces: list[ResearchDecisionTrace],
+    scenario_feature: ScenarioFeatureSnapshot | None,
     trust_verdict: TrustVerdict | None,
     decision: ReplayDecision,
     error_code: str | None,
@@ -427,6 +434,7 @@ def _step_from_decision(
         research_signals=research_signals,
         research_proposals=research_proposals,
         research_traces=research_traces,
+        scenario_feature=scenario_feature,
         trust_verdict=trust_verdict,
     )
     output_payload = {
@@ -507,6 +515,7 @@ def _step_from_decision(
             **_divergence_metadata(divergence_assessments),
             **_paper_metadata(paper_position, paper_portfolio),
             **_research_metadata(research_signals, research_proposals, research_traces),
+            **_scenario_metadata(scenario_feature),
             **decision.metadata,
         },
     )
@@ -551,6 +560,7 @@ def _error_step(
         research_signals=[],
         research_proposals=[],
         research_traces=[],
+        scenario_feature=None,
         trust_verdict=None,
         decision=decision,
         error_code=exc.__class__.__name__,
@@ -577,6 +587,7 @@ def _input_payload(
     research_signals: list[ResearchSignal],
     research_proposals: list[ResearchIntentProposal],
     research_traces: list[ResearchDecisionTrace],
+    scenario_feature: ScenarioFeatureSnapshot | None,
     trust_verdict: TrustVerdict | None,
 ) -> dict[str, Any]:
     return {
@@ -610,6 +621,7 @@ def _input_payload(
         **_divergence_metadata(divergence_assessments),
         **_paper_metadata(paper_position, paper_portfolio),
         **_research_metadata(research_signals, research_proposals, research_traces),
+        **_scenario_metadata(scenario_feature),
         "ambiguity_assessment_id": (
             resolution_analysis.ambiguity_assessment.assessment_id
             if resolution_analysis
@@ -670,6 +682,25 @@ def _research_metadata(
         "research_signal_count": len(signals),
         "research_proposal_count": len(proposals),
         "research_pretrade_action_counts": dict(sorted(pretrade_action_counts.items())),
+    }
+
+
+def _scenario_metadata(
+    scenario_feature: ScenarioFeatureSnapshot | None,
+) -> dict[str, Any]:
+    return {
+        "latest_scenario_feature_snapshot_id": (
+            scenario_feature.scenario_feature_snapshot_id if scenario_feature else None
+        ),
+        "scenario_confidence_score": (
+            scenario_feature.scenario_confidence_score if scenario_feature else None
+        ),
+        "scenario_uncertainty_score": (
+            scenario_feature.scenario_uncertainty_score if scenario_feature else None
+        ),
+        "scenario_reason_codes": (
+            list(scenario_feature.reason_codes) if scenario_feature else []
+        ),
     }
 
 

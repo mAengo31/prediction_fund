@@ -168,6 +168,12 @@ from prediction_desk.persistence.orm import (
     ResolutionPredicateRecord,
     ResolutionSourceRecord,
     RuleSnapshotDiffRecord,
+    ScenarioArtifactRecord,
+    ScenarioFeatureSnapshotRecord,
+    ScenarioRunRecord,
+    ScenarioRunSummaryRecord,
+    ScenarioSeedBundleRecord,
+    ScenarioSimulationSpecRecord,
     TradeIntentRecord,
     TradePrintRecord,
     TrustVerdictRecord,
@@ -229,6 +235,22 @@ from prediction_desk.resolution.models import (
     ResolutionPredicate,
     ResolutionSource,
     RuleSnapshotDiff,
+)
+from prediction_desk.scenario.enums import (
+    ScenarioArtifactSourceType,
+    ScenarioArtifactType,
+    ScenarioEngine,
+    ScenarioRunMode,
+    ScenarioRunStatus,
+    ScenarioSeedSource,
+)
+from prediction_desk.scenario.models import (
+    ScenarioArtifact,
+    ScenarioFeatureSnapshot,
+    ScenarioRun,
+    ScenarioRunSummary,
+    ScenarioSeedBundle,
+    ScenarioSimulationSpec,
 )
 
 
@@ -2671,6 +2693,240 @@ class PredictionMarketRepository:
         )
         record = self.session.scalar(stmt)
         return _research_attribution_report_from_record(record) if record else None
+
+    def save_scenario_seed_bundle(
+        self,
+        bundle: ScenarioSeedBundle,
+    ) -> ScenarioSeedBundle:
+        self.session.merge(_scenario_seed_bundle_to_record(bundle))
+        self.session.flush()
+        return bundle
+
+    def find_scenario_seed_bundle_by_hash(
+        self,
+        input_hash: str,
+    ) -> ScenarioSeedBundle | None:
+        stmt = (
+            select(ScenarioSeedBundleRecord)
+            .where(ScenarioSeedBundleRecord.input_hash == input_hash)
+            .order_by(ScenarioSeedBundleRecord.seed_bundle_id)
+            .limit(1)
+        )
+        record = self.session.scalar(stmt)
+        return _scenario_seed_bundle_from_record(record) if record else None
+
+    def get_scenario_seed_bundle(
+        self,
+        seed_bundle_id: str,
+    ) -> ScenarioSeedBundle | None:
+        record = self.session.get(ScenarioSeedBundleRecord, seed_bundle_id)
+        return _scenario_seed_bundle_from_record(record) if record else None
+
+    def get_latest_scenario_seed_bundle_asof(
+        self,
+        market_id: str,
+        asof_timestamp: datetime,
+    ) -> ScenarioSeedBundle | None:
+        stmt = (
+            select(ScenarioSeedBundleRecord)
+            .where(ScenarioSeedBundleRecord.market_id == market_id)
+            .where(ScenarioSeedBundleRecord.available_at <= asof_timestamp)
+            .order_by(
+                desc(ScenarioSeedBundleRecord.available_at),
+                desc(ScenarioSeedBundleRecord.generated_at),
+                ScenarioSeedBundleRecord.seed_bundle_id,
+            )
+            .limit(1)
+        )
+        record = self.session.scalar(stmt)
+        return _scenario_seed_bundle_from_record(record) if record else None
+
+    def save_scenario_simulation_spec(
+        self,
+        spec: ScenarioSimulationSpec,
+    ) -> ScenarioSimulationSpec:
+        self.session.merge(_scenario_simulation_spec_to_record(spec))
+        self.session.flush()
+        return spec
+
+    def get_scenario_simulation_spec(
+        self,
+        scenario_spec_id: str,
+    ) -> ScenarioSimulationSpec | None:
+        record = self.session.get(ScenarioSimulationSpecRecord, scenario_spec_id)
+        return _scenario_simulation_spec_from_record(record) if record else None
+
+    def save_scenario_artifact(
+        self,
+        artifact: ScenarioArtifact,
+    ) -> ScenarioArtifact:
+        self.session.merge(_scenario_artifact_to_record(artifact))
+        self.session.flush()
+        return artifact
+
+    def find_scenario_artifact_by_hash(
+        self,
+        payload_hash: str,
+    ) -> ScenarioArtifact | None:
+        stmt = (
+            select(ScenarioArtifactRecord)
+            .where(ScenarioArtifactRecord.payload_hash == payload_hash)
+            .order_by(ScenarioArtifactRecord.scenario_artifact_id)
+            .limit(1)
+        )
+        record = self.session.scalar(stmt)
+        return _scenario_artifact_from_record(record) if record else None
+
+    def get_scenario_artifact(
+        self,
+        scenario_artifact_id: str,
+    ) -> ScenarioArtifact | None:
+        record = self.session.get(ScenarioArtifactRecord, scenario_artifact_id)
+        return _scenario_artifact_from_record(record) if record else None
+
+    def list_scenario_artifacts(
+        self,
+        *,
+        market_id: str | None = None,
+        asof_timestamp: datetime | None = None,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[ScenarioArtifact]:
+        stmt = (
+            select(ScenarioArtifactRecord)
+            .order_by(
+                desc(ScenarioArtifactRecord.available_at),
+                ScenarioArtifactRecord.scenario_artifact_id,
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        if market_id is not None:
+            stmt = stmt.where(ScenarioArtifactRecord.market_id == market_id)
+        if asof_timestamp is not None:
+            stmt = stmt.where(ScenarioArtifactRecord.available_at <= asof_timestamp)
+        return [
+            _scenario_artifact_from_record(record)
+            for record in self.session.scalars(stmt)
+        ]
+
+    def save_scenario_feature_snapshot(
+        self,
+        snapshot: ScenarioFeatureSnapshot,
+    ) -> ScenarioFeatureSnapshot:
+        self.session.merge(_scenario_feature_snapshot_to_record(snapshot))
+        self.session.flush()
+        return snapshot
+
+    def find_scenario_feature_snapshot_by_hash(
+        self,
+        input_hash: str,
+    ) -> ScenarioFeatureSnapshot | None:
+        stmt = (
+            select(ScenarioFeatureSnapshotRecord)
+            .where(ScenarioFeatureSnapshotRecord.input_hash == input_hash)
+            .order_by(ScenarioFeatureSnapshotRecord.scenario_feature_snapshot_id)
+            .limit(1)
+        )
+        record = self.session.scalar(stmt)
+        return _scenario_feature_snapshot_from_record(record) if record else None
+
+    def get_latest_scenario_feature_asof(
+        self,
+        market_id: str,
+        asof_timestamp: datetime,
+    ) -> ScenarioFeatureSnapshot | None:
+        stmt = (
+            select(ScenarioFeatureSnapshotRecord)
+            .where(ScenarioFeatureSnapshotRecord.market_id == market_id)
+            .where(ScenarioFeatureSnapshotRecord.available_at <= asof_timestamp)
+            .order_by(
+                desc(ScenarioFeatureSnapshotRecord.available_at),
+                desc(ScenarioFeatureSnapshotRecord.generated_at),
+                ScenarioFeatureSnapshotRecord.scenario_feature_snapshot_id,
+            )
+            .limit(1)
+        )
+        record = self.session.scalar(stmt)
+        return _scenario_feature_snapshot_from_record(record) if record else None
+
+    def list_scenario_features(
+        self,
+        *,
+        market_id: str | None = None,
+        asof_timestamp: datetime | None = None,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[ScenarioFeatureSnapshot]:
+        stmt = (
+            select(ScenarioFeatureSnapshotRecord)
+            .order_by(
+                desc(ScenarioFeatureSnapshotRecord.available_at),
+                ScenarioFeatureSnapshotRecord.scenario_feature_snapshot_id,
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        if market_id is not None:
+            stmt = stmt.where(ScenarioFeatureSnapshotRecord.market_id == market_id)
+        if asof_timestamp is not None:
+            stmt = stmt.where(ScenarioFeatureSnapshotRecord.available_at <= asof_timestamp)
+        return [
+            _scenario_feature_snapshot_from_record(record)
+            for record in self.session.scalars(stmt)
+        ]
+
+    def save_scenario_run(self, run: ScenarioRun) -> ScenarioRun:
+        self.session.merge(_scenario_run_to_record(run))
+        self.session.flush()
+        return run
+
+    def update_scenario_run(self, run: ScenarioRun) -> ScenarioRun:
+        self.session.merge(_scenario_run_to_record(run))
+        self.session.flush()
+        return run
+
+    def get_scenario_run(self, scenario_run_id: str) -> ScenarioRun | None:
+        record = self.session.get(ScenarioRunRecord, scenario_run_id)
+        return _scenario_run_from_record(record) if record else None
+
+    def list_scenario_runs(
+        self,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[ScenarioRun]:
+        stmt = (
+            select(ScenarioRunRecord)
+            .order_by(desc(ScenarioRunRecord.created_at), ScenarioRunRecord.scenario_run_id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_scenario_run_from_record(record) for record in self.session.scalars(stmt)]
+
+    def save_scenario_run_summary(
+        self,
+        summary: ScenarioRunSummary,
+    ) -> ScenarioRunSummary:
+        self.session.merge(_scenario_run_summary_to_record(summary))
+        self.session.flush()
+        return summary
+
+    def get_scenario_run_summary(
+        self,
+        scenario_run_id: str,
+    ) -> ScenarioRunSummary | None:
+        stmt = (
+            select(ScenarioRunSummaryRecord)
+            .where(ScenarioRunSummaryRecord.scenario_run_id == scenario_run_id)
+            .order_by(
+                desc(ScenarioRunSummaryRecord.created_at),
+                ScenarioRunSummaryRecord.summary_id,
+            )
+            .limit(1)
+        )
+        record = self.session.scalar(stmt)
+        return _scenario_run_summary_from_record(record) if record else None
 
 
 def _metadata(value: dict[str, Any] | None) -> dict[str, Any]:
@@ -5818,6 +6074,294 @@ def _research_attribution_report_from_record(
         by_paper_order_status=_metadata(record.by_paper_order_status),
         simulated_pnl_by_strategy=_metadata(record.simulated_pnl_by_strategy),
         simulated_pnl_by_market=_metadata(record.simulated_pnl_by_market),
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _scenario_seed_bundle_to_record(
+    bundle: ScenarioSeedBundle,
+) -> ScenarioSeedBundleRecord:
+    return ScenarioSeedBundleRecord(
+        seed_bundle_id=bundle.seed_bundle_id,
+        market_id=bundle.market_id,
+        asof_timestamp=bundle.asof_timestamp,
+        generated_at=bundle.generated_at,
+        available_at=bundle.available_at,
+        seed_source=bundle.seed_source.value,
+        market_title=bundle.market_title,
+        market_description=bundle.market_description,
+        rule_snapshot_id=bundle.rule_snapshot_id,
+        rule_snapshot_hash=bundle.rule_snapshot_hash,
+        resolution_predicate_id=bundle.resolution_predicate_id,
+        ambiguity_assessment_id=bundle.ambiguity_assessment_id,
+        market_data_quality_report_id=bundle.market_data_quality_report_id,
+        integrity_assessment_id=bundle.integrity_assessment_id,
+        equivalence_assessment_ids=list(bundle.equivalence_assessment_ids),
+        divergence_assessment_ids=list(bundle.divergence_assessment_ids),
+        trust_verdict_id=bundle.trust_verdict_id,
+        source_ref_ids=list(bundle.source_ref_ids),
+        seed_text=bundle.seed_text,
+        structured_context=_json_metadata(bundle.structured_context),
+        input_hash=bundle.input_hash,
+        output_hash=bundle.output_hash,
+        metadata_json=_json_metadata(bundle.metadata),
+    )
+
+
+def _scenario_seed_bundle_from_record(
+    record: ScenarioSeedBundleRecord,
+) -> ScenarioSeedBundle:
+    return ScenarioSeedBundle(
+        seed_bundle_id=record.seed_bundle_id,
+        market_id=record.market_id,
+        asof_timestamp=record.asof_timestamp,
+        generated_at=record.generated_at,
+        available_at=record.available_at,
+        seed_source=ScenarioSeedSource(record.seed_source),
+        market_title=record.market_title,
+        market_description=record.market_description,
+        rule_snapshot_id=record.rule_snapshot_id,
+        rule_snapshot_hash=record.rule_snapshot_hash,
+        resolution_predicate_id=record.resolution_predicate_id,
+        ambiguity_assessment_id=record.ambiguity_assessment_id,
+        market_data_quality_report_id=record.market_data_quality_report_id,
+        integrity_assessment_id=record.integrity_assessment_id,
+        equivalence_assessment_ids=list(record.equivalence_assessment_ids),
+        divergence_assessment_ids=list(record.divergence_assessment_ids),
+        trust_verdict_id=record.trust_verdict_id,
+        source_ref_ids=list(record.source_ref_ids),
+        seed_text=record.seed_text,
+        structured_context=_metadata(record.structured_context),
+        input_hash=record.input_hash,
+        output_hash=record.output_hash,
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _scenario_simulation_spec_to_record(
+    spec: ScenarioSimulationSpec,
+) -> ScenarioSimulationSpecRecord:
+    return ScenarioSimulationSpecRecord(
+        scenario_spec_id=spec.scenario_spec_id,
+        seed_bundle_id=spec.seed_bundle_id,
+        market_id=spec.market_id,
+        asof_timestamp=spec.asof_timestamp,
+        created_at=spec.created_at,
+        scenario_engine=spec.scenario_engine.value,
+        scenario_goal=spec.scenario_goal,
+        horizon_hours=spec.horizon_hours,
+        requested_agent_count=spec.requested_agent_count,
+        requested_rounds=spec.requested_rounds,
+        variables=_json_metadata(spec.variables),
+        constraints=_json_metadata(spec.constraints),
+        metadata_json=_json_metadata(spec.metadata),
+    )
+
+
+def _scenario_simulation_spec_from_record(
+    record: ScenarioSimulationSpecRecord,
+) -> ScenarioSimulationSpec:
+    return ScenarioSimulationSpec(
+        scenario_spec_id=record.scenario_spec_id,
+        seed_bundle_id=record.seed_bundle_id,
+        market_id=record.market_id,
+        asof_timestamp=record.asof_timestamp,
+        created_at=record.created_at,
+        scenario_engine=ScenarioEngine(record.scenario_engine),
+        scenario_goal=record.scenario_goal,
+        horizon_hours=record.horizon_hours,
+        requested_agent_count=record.requested_agent_count,
+        requested_rounds=record.requested_rounds,
+        variables=_metadata(record.variables),
+        constraints=_metadata(record.constraints),
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _scenario_artifact_to_record(artifact: ScenarioArtifact) -> ScenarioArtifactRecord:
+    return ScenarioArtifactRecord(
+        scenario_artifact_id=artifact.scenario_artifact_id,
+        scenario_spec_id=artifact.scenario_spec_id,
+        seed_bundle_id=artifact.seed_bundle_id,
+        market_id=artifact.market_id,
+        asof_timestamp=artifact.asof_timestamp,
+        captured_at=artifact.captured_at,
+        available_at=artifact.available_at,
+        artifact_type=artifact.artifact_type.value,
+        source_type=artifact.source_type.value,
+        source_path=artifact.source_path,
+        raw_payload=_json_metadata(artifact.raw_payload),
+        raw_text=artifact.raw_text,
+        payload_hash=artifact.payload_hash,
+        schema_version=artifact.schema_version,
+        is_simulated=artifact.is_simulated,
+        metadata_json=_json_metadata(artifact.metadata),
+    )
+
+
+def _scenario_artifact_from_record(record: ScenarioArtifactRecord) -> ScenarioArtifact:
+    return ScenarioArtifact(
+        scenario_artifact_id=record.scenario_artifact_id,
+        scenario_spec_id=record.scenario_spec_id,
+        seed_bundle_id=record.seed_bundle_id,
+        market_id=record.market_id,
+        asof_timestamp=record.asof_timestamp,
+        captured_at=record.captured_at,
+        available_at=record.available_at,
+        artifact_type=ScenarioArtifactType(record.artifact_type),
+        source_type=ScenarioArtifactSourceType(record.source_type),
+        source_path=record.source_path,
+        raw_payload=_metadata(record.raw_payload),
+        raw_text=record.raw_text,
+        payload_hash=record.payload_hash,
+        schema_version=record.schema_version,
+        is_simulated=record.is_simulated,
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _scenario_feature_snapshot_to_record(
+    snapshot: ScenarioFeatureSnapshot,
+) -> ScenarioFeatureSnapshotRecord:
+    return ScenarioFeatureSnapshotRecord(
+        scenario_feature_snapshot_id=snapshot.scenario_feature_snapshot_id,
+        scenario_artifact_id=snapshot.scenario_artifact_id,
+        seed_bundle_id=snapshot.seed_bundle_id,
+        market_id=snapshot.market_id,
+        asof_timestamp=snapshot.asof_timestamp,
+        generated_at=snapshot.generated_at,
+        available_at=snapshot.available_at,
+        scenario_engine=snapshot.scenario_engine,
+        horizon_hours=snapshot.horizon_hours,
+        scenario_confidence_score=snapshot.scenario_confidence_score,
+        scenario_uncertainty_score=snapshot.scenario_uncertainty_score,
+        sentiment_score=snapshot.sentiment_score,
+        consensus_score=snapshot.consensus_score,
+        polarization_score=snapshot.polarization_score,
+        narrative_risk_score=snapshot.narrative_risk_score,
+        shock_risk_score=snapshot.shock_risk_score,
+        adoption_or_support_score=snapshot.adoption_or_support_score,
+        opposition_score=snapshot.opposition_score,
+        key_scenario_labels=list(snapshot.key_scenario_labels),
+        reason_codes=list(snapshot.reason_codes),
+        evidence=_json_metadata(snapshot.evidence),
+        source_ref_ids=list(snapshot.source_ref_ids),
+        input_hash=snapshot.input_hash,
+        output_hash=snapshot.output_hash,
+        metadata_json=_json_metadata(snapshot.metadata),
+    )
+
+
+def _scenario_feature_snapshot_from_record(
+    record: ScenarioFeatureSnapshotRecord,
+) -> ScenarioFeatureSnapshot:
+    return ScenarioFeatureSnapshot(
+        scenario_feature_snapshot_id=record.scenario_feature_snapshot_id,
+        scenario_artifact_id=record.scenario_artifact_id,
+        seed_bundle_id=record.seed_bundle_id,
+        market_id=record.market_id,
+        asof_timestamp=record.asof_timestamp,
+        generated_at=record.generated_at,
+        available_at=record.available_at,
+        scenario_engine=record.scenario_engine,
+        horizon_hours=record.horizon_hours,
+        scenario_confidence_score=record.scenario_confidence_score,
+        scenario_uncertainty_score=record.scenario_uncertainty_score,
+        sentiment_score=record.sentiment_score,
+        consensus_score=record.consensus_score,
+        polarization_score=record.polarization_score,
+        narrative_risk_score=record.narrative_risk_score,
+        shock_risk_score=record.shock_risk_score,
+        adoption_or_support_score=record.adoption_or_support_score,
+        opposition_score=record.opposition_score,
+        key_scenario_labels=list(record.key_scenario_labels),
+        reason_codes=list(record.reason_codes),
+        evidence=_metadata(record.evidence),
+        source_ref_ids=list(record.source_ref_ids),
+        input_hash=record.input_hash,
+        output_hash=record.output_hash,
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _scenario_run_to_record(run: ScenarioRun) -> ScenarioRunRecord:
+    return ScenarioRunRecord(
+        scenario_run_id=run.scenario_run_id,
+        name=run.name,
+        created_at=run.created_at,
+        started_at=run.started_at,
+        completed_at=run.completed_at,
+        status=run.status.value,
+        asof_timestamp=run.asof_timestamp,
+        market_ids=list(run.market_ids),
+        mode=run.mode.value,
+        max_items=run.max_items,
+        config_json=_json_metadata(run.config),
+        metadata_json=_json_metadata(run.metadata),
+        seed_bundles_created=run.seed_bundles_created,
+        specs_created=run.specs_created,
+        artifacts_imported=run.artifacts_imported,
+        features_created=run.features_created,
+        errors_count=run.errors_count,
+    )
+
+
+def _scenario_run_from_record(record: ScenarioRunRecord) -> ScenarioRun:
+    return ScenarioRun(
+        scenario_run_id=record.scenario_run_id,
+        name=record.name,
+        created_at=record.created_at,
+        started_at=record.started_at,
+        completed_at=record.completed_at,
+        status=ScenarioRunStatus(record.status),
+        asof_timestamp=record.asof_timestamp,
+        market_ids=list(record.market_ids),
+        mode=ScenarioRunMode(record.mode),
+        max_items=record.max_items,
+        config=_metadata(record.config_json),
+        metadata=_metadata(record.metadata_json),
+        seed_bundles_created=record.seed_bundles_created,
+        specs_created=record.specs_created,
+        artifacts_imported=record.artifacts_imported,
+        features_created=record.features_created,
+        errors_count=record.errors_count,
+    )
+
+
+def _scenario_run_summary_to_record(
+    summary: ScenarioRunSummary,
+) -> ScenarioRunSummaryRecord:
+    return ScenarioRunSummaryRecord(
+        summary_id=summary.summary_id,
+        scenario_run_id=summary.scenario_run_id,
+        created_at=summary.created_at,
+        total_seed_bundles=summary.total_seed_bundles,
+        total_artifacts=summary.total_artifacts,
+        total_features=summary.total_features,
+        average_scores={
+            key: str(value) for key, value in summary.average_scores.items()
+        },
+        reason_code_counts=dict(summary.reason_code_counts),
+        markets_processed=summary.markets_processed,
+        metadata_json=_json_metadata(summary.metadata),
+    )
+
+
+def _scenario_run_summary_from_record(
+    record: ScenarioRunSummaryRecord,
+) -> ScenarioRunSummary:
+    return ScenarioRunSummary(
+        summary_id=record.summary_id,
+        scenario_run_id=record.scenario_run_id,
+        created_at=record.created_at,
+        total_seed_bundles=record.total_seed_bundles,
+        total_artifacts=record.total_artifacts,
+        total_features=record.total_features,
+        average_scores={
+            key: Decimal(str(value)) for key, value in record.average_scores.items()
+        },
+        reason_code_counts=dict(record.reason_code_counts),
+        markets_processed=record.markets_processed,
         metadata=_metadata(record.metadata_json),
     )
 

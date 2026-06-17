@@ -22,8 +22,21 @@ def test_default_research_strategies_created_deterministically() -> None:
         "integrity_pass_filter_v1",
         "divergence_research_hypothesis_v1",
         "composite_conservative_research_v1",
+        "scenario_context_research_v1",
     ]
-    assert all(definition.requires_pretrade for definition in first)
+    assert all(
+        definition.requires_pretrade
+        for definition in first
+        if definition.strategy_name != "scenario_context_research_v1"
+    )
+    assert (
+        next(
+            definition
+            for definition in first
+            if definition.strategy_name == "scenario_context_research_v1"
+        ).requires_pretrade
+        is False
+    )
 
 
 def test_research_proposal_validates_size_and_probability_price() -> None:
@@ -32,4 +45,3 @@ def test_research_proposal_validates_size_and_probability_price() -> None:
 
     with pytest.raises(ValidationError):
         research_proposal(requested_price=Decimal("1.01"))
-

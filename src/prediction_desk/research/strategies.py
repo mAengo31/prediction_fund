@@ -19,6 +19,7 @@ from prediction_desk.research.models import (
     COMPOSITE_STRATEGY_ID,
     DIVERGENCE_STRATEGY_ID,
     INTEGRITY_PASS_STRATEGY_ID,
+    SCENARIO_CONTEXT_STRATEGY_ID,
     TRUST_ALLOW_STRATEGY_ID,
     ResearchFeatureSnapshot,
     ResearchIntentProposal,
@@ -126,6 +127,20 @@ def default_research_strategy_definitions(
             default_strategy_context="RESEARCH",
             config={"min_quality_score": 70, "max_integrity_risk": 50},
         ),
+        ResearchStrategyDefinition(
+            strategy_id=SCENARIO_CONTEXT_STRATEGY_ID,
+            strategy_name="scenario_context_research_v1",
+            strategy_version="v1",
+            created_at=now,
+            family=ResearchStrategyFamily.CUSTOM,
+            description="Research-only context filter for slow-lane scenario features.",
+            requires_pretrade=False,
+            allows_paper_simulation=False,
+            default_requested_size_units=Decimal("1"),
+            default_intent_type=TradeIntentType.RESEARCH_ONLY.value,
+            default_strategy_context="RESEARCH",
+            config={"min_watch_confidence": 55, "max_watch_risk": 50},
+        ),
     ]
 
 
@@ -136,6 +151,7 @@ def strategy_from_definition(definition: ResearchStrategyDefinition) -> Research
         "integrity_pass_filter_v1": IntegrityPassFilterStrategy,
         "divergence_research_hypothesis_v1": DivergenceResearchHypothesisStrategy,
         "composite_conservative_research_v1": CompositeConservativeResearchStrategy,
+        "scenario_context_research_v1": ScenarioContextResearchStrategy,
     }
     return cast(
         ResearchStrategy,
@@ -557,6 +573,86 @@ class CompositeConservativeResearchStrategy(_BaseStrategy):
         return StrategyResult(signals=[signal], proposals=[proposal])
 
 
+class ScenarioContextResearchStrategy(_BaseStrategy):
+    def generate_signals_and_proposals(
+        self,
+        market_id: str,
+        asof_timestamp: datetime,
+        features: list[ResearchFeatureSnapshot],
+        config: dict[str, Any] | None = None,
+    ) -> StrategyResult:
+        cfg = {**self.definition.config, **(config or {})}
+        values = _values(
+            features,
+            ResearchFeatureSource.SCENARIO_SIMULATION_PLACEHOLDER,
+        )
+        confidence = _int_value(values.get("scenario_confidence_score"))
+        uncertainty = _int_value(values.get("scenario_uncertainty_score"))
+        narrative = _int_value(values.get("narrative_risk_score"))
+        shock = _int_value(values.get("shock_risk_score"))
+        polarization = _int_value(values.get("polarization_score"))
+        if not values or values.get("scenario_feature_snapshot_id") is None:
+            signal = self._signal(
+                market_id=market_id,
+                asof_timestamp=asof_timestamp,
+                features=features,
+                signal_type=ResearchSignalType.REVIEW_ONLY,
+                action_bias=ResearchActionBias.REVIEW_ONLY,
+                reason_codes=["NO_SCENARIO_FEATURE"],
+                strength=20,
+                confidence=25,
+            )
+            return StrategyResult(signals=[signal], proposals=[])
+        if any(
+            value is not None and value >= 70
+            for value in [uncertainty, narrative, shock, polarization]
+        ):
+            signal = self._signal(
+                market_id=market_id,
+                asof_timestamp=asof_timestamp,
+                features=features,
+                signal_type=ResearchSignalType.REVIEW_ONLY,
+                action_bias=ResearchActionBias.REVIEW_ONLY,
+                reason_codes=["SCENARIO_CONTEXT_REQUIRES_REVIEW"],
+                strength=65,
+                confidence=55,
+                metadata={"scenario_reason_codes": values.get("reason_codes", [])},
+            )
+            return StrategyResult(signals=[signal], proposals=[])
+        risk_values = [
+            value for value in [narrative, shock, polarization] if value is not None
+        ]
+        max_risk = max(risk_values, default=0)
+        if (
+            confidence is not None
+            and confidence >= int(cfg.get("min_watch_confidence", 55))
+            and max_risk <= int(cfg.get("max_watch_risk", 50))
+        ):
+            signal = self._signal(
+                market_id=market_id,
+                asof_timestamp=asof_timestamp,
+                features=features,
+                signal_type=ResearchSignalType.WATCH,
+                action_bias=ResearchActionBias.REVIEW_ONLY,
+                reason_codes=["SCENARIO_CONTEXT_WATCH"],
+                strength=40,
+                confidence=confidence,
+                metadata={"scenario_labels": values.get("key_scenario_labels", [])},
+            )
+            return StrategyResult(signals=[signal], proposals=[])
+        signal = self._signal(
+            market_id=market_id,
+            asof_timestamp=asof_timestamp,
+            features=features,
+            signal_type=ResearchSignalType.REVIEW_ONLY,
+            action_bias=ResearchActionBias.REVIEW_ONLY,
+            reason_codes=["SCENARIO_CONTEXT_INCONCLUSIVE"],
+            strength=35,
+            confidence=40,
+        )
+        return StrategyResult(signals=[signal], proposals=[])
+
+
 def _values(
     features: list[ResearchFeatureSnapshot],
     source: ResearchFeatureSource,
@@ -565,6 +661,15 @@ def _values(
         if feature.feature_source == source:
             return dict(feature.values)
     return {}
+
+
+def _int_value(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _lower_side_from_feature(

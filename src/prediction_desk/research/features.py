@@ -14,6 +14,7 @@ from prediction_desk.research.models import (
     compute_feature_output_hash,
     research_object_id,
 )
+from prediction_desk.scenario.features import scenario_feature_values
 
 
 def build_research_features(
@@ -58,6 +59,7 @@ def _build_research_features(
         ResearchFeatureSource.DIVERGENCE: _divergence_feature,
         ResearchFeatureSource.PRETRADE: _pretrade_feature,
         ResearchFeatureSource.PAPER: _paper_feature,
+        ResearchFeatureSource.SCENARIO_SIMULATION_PLACEHOLDER: _scenario_feature,
     }
     features: list[ResearchFeatureSnapshot] = []
     for source in selected:
@@ -85,8 +87,15 @@ def _selected_sources(
             ResearchFeatureSource.DIVERGENCE,
             ResearchFeatureSource.PRETRADE,
             ResearchFeatureSource.PAPER,
+            ResearchFeatureSource.SCENARIO_SIMULATION_PLACEHOLDER,
         ]
-    return [ResearchFeatureSource(str(source)) for source in include_sources]
+    selected: list[ResearchFeatureSource] = []
+    for source in include_sources:
+        value = str(source)
+        if value == "SCENARIO":
+            value = ResearchFeatureSource.SCENARIO_SIMULATION_PLACEHOLDER.value
+        selected.append(ResearchFeatureSource(value))
+    return selected
 
 
 def _market_data_feature(
@@ -400,6 +409,27 @@ def _paper_feature(
         source_ref_ids=refs,
         values=values,
         reason_codes=reason_codes,
+    )
+
+
+def _scenario_feature(
+    repo: PredictionMarketRepository,
+    market_id: str,
+    asof_timestamp: datetime,
+) -> ResearchFeatureSnapshot:
+    feature = repo.get_latest_scenario_feature_asof(market_id, asof_timestamp)
+    values = scenario_feature_values(feature)
+    refs = []
+    if feature is not None:
+        refs = [feature.scenario_feature_snapshot_id, feature.scenario_artifact_id]
+    return _feature(
+        market_id=market_id,
+        asof_timestamp=asof_timestamp,
+        source=ResearchFeatureSource.SCENARIO_SIMULATION_PLACEHOLDER,
+        family=ResearchFeatureFamily.SCENARIO,
+        source_ref_ids=refs,
+        values=values,
+        reason_codes=list(feature.reason_codes) if feature else ["NO_SCENARIO_FEATURE"],
     )
 
 

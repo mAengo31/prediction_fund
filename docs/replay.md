@@ -87,6 +87,10 @@ proposal, and trace IDs plus pre-trade action counts. `research_policy_v1` maps 
 stored research trace pre-trade action to a replay action, but it does not generate new
 signals, proposals, paper orders, or fills inside replay.
 
+Scenario metadata is recorded when an as-of scenario feature exists, including the latest
+scenario feature snapshot ID, confidence score, uncertainty score, and reason codes. V1
+replay policies do not change actions based on scenario features.
+
 ## Metrics
 
 Replay v1 calculates:

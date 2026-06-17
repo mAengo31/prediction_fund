@@ -213,7 +213,7 @@ as-of semantics.
 - External network calls in tests or CI.
 - Background daemons.
 
-## Recommendation
+## Release Readiness
 
 Proceed to Round 13 after creating a release checkpoint for the current working tree. No
 blocking RC validation failures remain.

@@ -166,6 +166,23 @@ from prediction_desk.research.runner import ResearchRunError, run_research_simul
 from prediction_desk.research.service import ResearchService, ResearchServiceError
 from prediction_desk.resolution.models import ResolutionAnalysis, RuleSnapshotDiff
 from prediction_desk.resolution.service import ResolutionCorpusError, ResolutionCorpusService
+from prediction_desk.scenario.models import (
+    ScenarioArtifact,
+    ScenarioFeatureSnapshot,
+    ScenarioImportFixturesRequest,
+    ScenarioImportManualRequest,
+    ScenarioRun,
+    ScenarioRunConfig,
+    ScenarioRunRequest,
+    ScenarioRunResult,
+    ScenarioRunSummary,
+    ScenarioSeedBuildRequest,
+    ScenarioSeedBundle,
+    ScenarioSimulationSpec,
+    ScenarioSpecCreateRequest,
+)
+from prediction_desk.scenario.runner import ScenarioRunError, run_scenario_import
+from prediction_desk.scenario.service import ScenarioService, ScenarioServiceError
 from prediction_desk.scoring.trust_verdict import build_trust_verdict
 
 health_router = APIRouter()
@@ -1993,6 +2010,239 @@ def get_paper_run_summary(
 
 
 @v1_router.post(
+    "/scenario/seeds/build",
+    response_model=ScenarioSeedBundle,
+    dependencies=[Depends(require_api_token)],
+)
+def build_scenario_seed_endpoint(
+    request_body: ScenarioSeedBuildRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> ScenarioSeedBundle:
+    try:
+        return ScenarioService(repo).build_seed_bundle_for_market(
+            request_body.market_id,
+            request_body.asof_timestamp or datetime.now(tz=UTC),
+            force=request_body.force,
+        )
+    except ScenarioServiceError as exc:
+        raise _scenario_http_error(exc) from exc
+
+
+@v1_router.get(
+    "/markets/{market_id}/scenario/seed/latest",
+    response_model=ScenarioSeedBundle | None,
+    dependencies=[Depends(require_api_token)],
+)
+def get_latest_scenario_seed(
+    market_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    asof_timestamp: datetime | None = None,
+) -> ScenarioSeedBundle | None:
+    return repo.get_latest_scenario_seed_bundle_asof(
+        market_id,
+        asof_timestamp or datetime.now(tz=UTC),
+    )
+
+
+@v1_router.post(
+    "/scenario/specs",
+    response_model=ScenarioSimulationSpec,
+    dependencies=[Depends(require_api_token)],
+)
+def create_scenario_spec_endpoint(
+    request_body: ScenarioSpecCreateRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> ScenarioSimulationSpec:
+    try:
+        return ScenarioService(repo).create_scenario_spec(
+            request_body.seed_bundle_id,
+            request_body.scenario_goal,
+            horizon_hours=request_body.horizon_hours,
+            variables=request_body.variables,
+            constraints=request_body.constraints,
+            metadata=request_body.metadata,
+        )
+    except ScenarioServiceError as exc:
+        raise _scenario_http_error(exc) from exc
+
+
+@v1_router.post(
+    "/scenario/import-fixtures",
+    response_model=list[ScenarioArtifact],
+    dependencies=[Depends(require_api_token)],
+)
+def import_scenario_fixtures_endpoint(
+    request_body: ScenarioImportFixturesRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> list[ScenarioArtifact]:
+    try:
+        return ScenarioService(repo).import_fixture_artifacts(
+            market_ids=request_body.market_ids,
+            asof_timestamp=request_body.asof_timestamp or datetime.now(tz=UTC),
+            fixture_dir=request_body.fixture_dir,
+            force=request_body.force,
+        )
+    except ScenarioServiceError as exc:
+        raise _scenario_http_error(exc) from exc
+
+
+@v1_router.post(
+    "/scenario/import-manual",
+    response_model=ScenarioArtifact,
+    dependencies=[Depends(require_api_token)],
+)
+def import_scenario_manual_endpoint(
+    request_body: ScenarioImportManualRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> ScenarioArtifact:
+    try:
+        return ScenarioService(repo).import_manual_artifact(
+            file_path=request_body.file_path,
+            market_id=request_body.market_id,
+            asof_timestamp=request_body.asof_timestamp or datetime.now(tz=UTC),
+            seed_bundle_id=request_body.seed_bundle_id,
+            force=request_body.force,
+        )
+    except ScenarioServiceError as exc:
+        raise _scenario_http_error(exc) from exc
+
+
+@v1_router.post(
+    "/scenario/artifacts/{scenario_artifact_id}/normalize",
+    response_model=ScenarioFeatureSnapshot,
+    dependencies=[Depends(require_api_token)],
+)
+def normalize_scenario_artifact_endpoint(
+    scenario_artifact_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    force: bool = False,
+) -> ScenarioFeatureSnapshot:
+    try:
+        return ScenarioService(repo).normalize_scenario_artifact(
+            scenario_artifact_id,
+            force=force,
+        )
+    except ScenarioServiceError as exc:
+        raise _scenario_http_error(exc) from exc
+
+
+@v1_router.get(
+    "/scenario/artifacts",
+    response_model=list[ScenarioArtifact],
+    dependencies=[Depends(require_api_token)],
+)
+def list_scenario_artifacts(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    market_id: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[ScenarioArtifact]:
+    return ScenarioService(repo).list_scenario_artifacts(
+        market_id=market_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@v1_router.get(
+    "/scenario/features",
+    response_model=list[ScenarioFeatureSnapshot],
+    dependencies=[Depends(require_api_token)],
+)
+def list_scenario_features(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    market_id: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[ScenarioFeatureSnapshot]:
+    return ScenarioService(repo).list_scenario_features(
+        market_id=market_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@v1_router.get(
+    "/markets/{market_id}/scenario/latest",
+    response_model=ScenarioFeatureSnapshot | None,
+    dependencies=[Depends(require_api_token)],
+)
+def get_latest_scenario_feature(
+    market_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    asof_timestamp: datetime | None = None,
+) -> ScenarioFeatureSnapshot | None:
+    return ScenarioService(repo).get_latest_scenario_feature_asof(
+        market_id,
+        asof_timestamp or datetime.now(tz=UTC),
+    )
+
+
+@v1_router.post(
+    "/scenario/runs",
+    response_model=ScenarioRunResult,
+    dependencies=[Depends(require_api_token)],
+)
+def create_scenario_run(
+    request_body: ScenarioRunRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> ScenarioRunResult:
+    config = ScenarioRunConfig(
+        **{
+            **request_body.model_dump(),
+            "asof_timestamp": request_body.asof_timestamp or datetime.now(tz=UTC),
+        }
+    )
+    try:
+        return run_scenario_import(config, repo=repo)
+    except ScenarioRunError as exc:
+        raise _scenario_run_http_error(exc) from exc
+
+
+@v1_router.get(
+    "/scenario/runs",
+    response_model=list[ScenarioRun],
+    dependencies=[Depends(require_api_token)],
+)
+def list_scenario_runs(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[ScenarioRun]:
+    return ScenarioService(repo).list_scenario_runs(limit=limit, offset=offset)
+
+
+@v1_router.get(
+    "/scenario/runs/{scenario_run_id}",
+    response_model=ScenarioRun,
+    dependencies=[Depends(require_api_token)],
+)
+def get_scenario_run(
+    scenario_run_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> ScenarioRun:
+    try:
+        return ScenarioService(repo).get_scenario_run(scenario_run_id)
+    except ScenarioServiceError as exc:
+        raise _scenario_http_error(exc) from exc
+
+
+@v1_router.get(
+    "/scenario/runs/{scenario_run_id}/summary",
+    response_model=ScenarioRunSummary,
+    dependencies=[Depends(require_api_token)],
+)
+def get_scenario_run_summary(
+    scenario_run_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> ScenarioRunSummary:
+    try:
+        return ScenarioService(repo).get_scenario_run_summary(scenario_run_id)
+    except ScenarioServiceError as exc:
+        raise _scenario_http_error(exc) from exc
+
+
+@v1_router.post(
     "/research/strategies/default",
     response_model=list[ResearchStrategyDefinition],
     dependencies=[Depends(require_api_token)],
@@ -2043,11 +2293,7 @@ def build_research_features_endpoint(
     return ResearchService(repo).build_features_for_market(
         request_body.market_id,
         request_body.asof_timestamp or datetime.now(tz=UTC),
-        include_sources=(
-            [source.value for source in request_body.include_sources]
-            if request_body.include_sources
-            else None
-        ),
+        include_sources=request_body.include_sources,
         force=request_body.force,
     )
 
@@ -2476,3 +2722,31 @@ def _research_run_http_error(exc: ResearchRunError) -> HTTPException:
     else:
         status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     return HTTPException(status_code=status_code, detail=exc.code)
+
+
+def _scenario_http_error(exc: ScenarioServiceError) -> HTTPException:
+    if exc.code in {
+        "scenario_seed_bundle_not_found",
+        "scenario_artifact_not_found",
+        "scenario_run_not_found",
+        "scenario_run_summary_not_found",
+        "scenario_seed_market_not_found",
+    }:
+        status_code = status.HTTP_404_NOT_FOUND
+    elif exc.code.startswith("scenario_artifact_") or exc.code in {
+        "scenario_file_path_must_be_local",
+        "scenario_fixture_dir_not_found",
+        "scenario_artifact_must_be_json",
+        "scenario_artifact_market_id_required",
+    }:
+        status_code = status.HTTP_400_BAD_REQUEST
+    else:
+        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    return HTTPException(status_code=status_code, detail=exc.code)
+
+
+def _scenario_run_http_error(exc: ScenarioRunError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=exc.code,
+    )

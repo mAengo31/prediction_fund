@@ -1,0 +1,44 @@
+{
+  "engine": "mirofish_style",
+  "schema_version": "mirofish_style_fixture_v1",
+  "market_id": "mkt_sfo_rain_2026_09_01",
+  "scenario_goal": "Assess public-context uncertainty for the SFO rain market.",
+  "horizon_hours": 72,
+  "summary": "Synthetic agents expect weather-model attention to remain split until closer to the event date.",
+  "predicted_outcome_label": "uncertain",
+  "confidence_score": 62,
+  "uncertainty_score": 38,
+  "sentiment_score": 50,
+  "consensus_score": 55,
+  "polarization_score": 25,
+  "narrative_risk_score": 20,
+  "shock_risk_score": 15,
+  "adoption_or_support_score": null,
+  "opposition_score": null,
+  "key_scenarios": [
+    "model spread narrows",
+    "coastal storm track shifts"
+  ],
+  "risk_factors": [
+    "long horizon",
+    "station-specific precipitation threshold"
+  ],
+  "agent_groups": [
+    {
+      "label": "commuters",
+      "stance": "neutral",
+      "weight": 0.25
+    },
+    {
+      "label": "weather observers",
+      "stance": "uncertain",
+      "weight": 0.35
+    }
+  ],
+  "evidence": {
+    "quoted_report_fragments": [
+      "Synthetic fixture fragment."
+    ]
+  },
+  "notes": "Synthetic fixture. Not a real MiroFish output."
+}

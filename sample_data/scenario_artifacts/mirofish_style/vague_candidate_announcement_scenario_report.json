@@ -1,0 +1,44 @@
+{
+  "engine": "mirofish_style",
+  "schema_version": "mirofish_style_fixture_v1",
+  "market_id": "mkt_candidate_announcement_vague_2026",
+  "scenario_goal": "Assess public-context uncertainty for a vague announcement market.",
+  "horizon_hours": 72,
+  "summary": "Synthetic agents disagree because the phrase soon has no stable operational boundary.",
+  "predicted_outcome_label": "unclear",
+  "confidence_score": 34,
+  "uncertainty_score": 82,
+  "sentiment_score": 45,
+  "consensus_score": 28,
+  "polarization_score": 74,
+  "narrative_risk_score": 76,
+  "shock_risk_score": 41,
+  "adoption_or_support_score": null,
+  "opposition_score": null,
+  "key_scenarios": [
+    "ambiguous timing language dominates",
+    "source wording changes interpretation"
+  ],
+  "risk_factors": [
+    "missing deadline",
+    "vague source language"
+  ],
+  "agent_groups": [
+    {
+      "label": "campaign watchers",
+      "stance": "split",
+      "weight": 0.4
+    },
+    {
+      "label": "rules reviewers",
+      "stance": "cautious",
+      "weight": 0.3
+    }
+  ],
+  "evidence": {
+    "quoted_report_fragments": [
+      "Synthetic ambiguity fragment."
+    ]
+  },
+  "notes": "Synthetic fixture. Not a real MiroFish output."
+}

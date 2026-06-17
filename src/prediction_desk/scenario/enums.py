@@ -1,0 +1,49 @@
+"""Enums for slow-lane scenario features."""
+
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+class ScenarioSeedSource(StrEnum):
+    MARKET_CONTEXT = "MARKET_CONTEXT"
+    RESEARCH_CONTEXT = "RESEARCH_CONTEXT"
+    MANUAL = "MANUAL"
+    FIXTURE = "FIXTURE"
+
+
+class ScenarioEngine(StrEnum):
+    MIROFISH_STYLE = "MIROFISH_STYLE"
+    MANUAL_FIXTURE = "MANUAL_FIXTURE"
+    CUSTOM = "CUSTOM"
+    UNKNOWN = "UNKNOWN"
+
+
+class ScenarioArtifactType(StrEnum):
+    MIROFISH_REPORT = "MIROFISH_REPORT"
+    MIROFISH_AGENT_SUMMARY = "MIROFISH_AGENT_SUMMARY"
+    MIROFISH_EVENT_LOG = "MIROFISH_EVENT_LOG"
+    MANUAL_NOTE = "MANUAL_NOTE"
+    FIXTURE_REPORT = "FIXTURE_REPORT"
+    UNKNOWN = "UNKNOWN"
+
+
+class ScenarioArtifactSourceType(StrEnum):
+    FIXTURE = "FIXTURE"
+    MANUAL_IMPORT = "MANUAL_IMPORT"
+    GENERATED_PLACEHOLDER = "GENERATED_PLACEHOLDER"
+
+
+class ScenarioRunStatus(StrEnum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    PARTIAL = "PARTIAL"
+
+
+class ScenarioRunMode(StrEnum):
+    BUILD_SEEDS_ONLY = "BUILD_SEEDS_ONLY"
+    IMPORT_FIXTURES = "IMPORT_FIXTURES"
+    IMPORT_MANUAL_ARTIFACTS = "IMPORT_MANUAL_ARTIFACTS"
+    NORMALIZE_EXISTING_ARTIFACTS = "NORMALIZE_EXISTING_ARTIFACTS"

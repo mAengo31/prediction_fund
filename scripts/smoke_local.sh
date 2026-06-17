@@ -205,14 +205,57 @@ PY
 )"
 curl -fsS "${API_BASE_URL}/api/v1/paper/runs/${paper_run_id}/summary" >/dev/null
 curl -fsS -X POST "${API_BASE_URL}/api/v1/research/strategies/default" >/dev/null
+curl -fsS -X POST "${API_BASE_URL}/api/v1/scenario/seeds/build" \
+  -H "Content-Type: application/json" \
+  -d "{\"market_id\":\"${MARKET_ID}\",\"asof_timestamp\":\"2026-06-16T12:00:00Z\",\"force\":false}" \
+  >/dev/null
+scenario_artifacts="$(curl -fsS -X POST "${API_BASE_URL}/api/v1/scenario/import-fixtures" \
+  -H "Content-Type: application/json" \
+  -d "{\"market_ids\":[\"${MARKET_ID}\"],\"asof_timestamp\":\"2026-06-16T12:00:00Z\",\"force\":false}")"
+scenario_artifact_id="$(python - "${scenario_artifacts}" <<'PY'
+import json
+import sys
+
+artifacts = json.loads(sys.argv[1])
+assert artifacts, artifacts
+print(artifacts[0]["scenario_artifact_id"])
+PY
+)"
+scenario_feature="$(curl -fsS -X POST "${API_BASE_URL}/api/v1/scenario/artifacts/${scenario_artifact_id}/normalize")"
+python - "${scenario_feature}" <<'PY'
+import json
+import sys
+
+feature = json.loads(sys.argv[1])
+assert feature["scenario_feature_snapshot_id"], feature
+assert feature["is_simulated"] if "is_simulated" in feature else True
+PY
+curl -fsS "${API_BASE_URL}/api/v1/markets/${MARKET_ID}/scenario/latest?asof_timestamp=2026-06-16T12:00:00Z" >/dev/null
+scenario_run="$(curl -fsS -X POST "${API_BASE_URL}/api/v1/scenario/runs" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"local smoke scenario\",\"asof_timestamp\":\"2026-06-16T12:00:00Z\",\"market_ids\":[\"${MARKET_ID}\"],\"mode\":\"IMPORT_FIXTURES\",\"max_items\":10,\"force\":false,\"metadata\":{}}")"
+python - "${scenario_run}" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+assert payload["summary"]["total_features"] >= 1, payload
+PY
 curl -fsS -X POST "${API_BASE_URL}/api/v1/research/features/build" \
   -H "Content-Type: application/json" \
   -d "{\"market_id\":\"${MARKET_ID}\",\"asof_timestamp\":\"2026-06-16T12:00:00Z\",\"force\":true}" \
   >/dev/null
-curl -fsS -X POST "${API_BASE_URL}/api/v1/research/signals/generate" \
+scenario_research_signals="$(curl -fsS -X POST "${API_BASE_URL}/api/v1/research/signals/generate" \
   -H "Content-Type: application/json" \
-  -d "{\"market_id\":\"${MARKET_ID}\",\"asof_timestamp\":\"2026-06-16T12:00:00Z\"}" \
-  >/dev/null
+  -d "{\"market_id\":\"${MARKET_ID}\",\"asof_timestamp\":\"2026-06-16T12:00:00Z\",\"strategy_ids\":[\"research_strategy_scenario_context_research_v1\"]}")"
+python - "${scenario_research_signals}" <<'PY'
+import json
+import sys
+
+signals = json.loads(sys.argv[1])
+assert signals, signals
+assert signals[0]["signal_type"] in {"WATCH", "REVIEW_ONLY"}, signals
+PY
 research_proposals="$(curl -fsS -X POST "${API_BASE_URL}/api/v1/research/proposals/generate" \
   -H "Content-Type: application/json" \
   -d "{\"market_id\":\"${MARKET_ID}\",\"asof_timestamp\":\"2026-06-16T12:00:00Z\",\"strategy_ids\":[\"research_strategy_baseline_research_only_v1\"]}")"
@@ -282,6 +325,7 @@ assert any(
     and step["metadata"].get("latest_research_signal_ids")
     and step["metadata"].get("latest_research_proposal_ids")
     and step["metadata"].get("latest_research_trace_ids")
+    and step["metadata"].get("latest_scenario_feature_snapshot_id")
     for step in steps
 ), steps
 PY
@@ -351,4 +395,4 @@ steps = json.loads(sys.argv[1])
 assert any(step["metadata"].get("latest_research_trace_ids") for step in steps), steps
 PY
 
-echo "Local smoke passed on ${API_BASE_URL}: ingestion, market data, integrity, equivalence, divergence, pretrade, paper, research, verdict, and replay succeeded."
+echo "Local smoke passed on ${API_BASE_URL}: ingestion, market data, integrity, equivalence, divergence, pretrade, paper, scenario, research, verdict, and replay succeeded."

@@ -32,6 +32,7 @@ TRUST_ALLOW_STRATEGY_ID = "research_strategy_trust_verdict_allow_filter_v1"
 INTEGRITY_PASS_STRATEGY_ID = "research_strategy_integrity_pass_filter_v1"
 DIVERGENCE_STRATEGY_ID = "research_strategy_divergence_research_hypothesis_v1"
 COMPOSITE_STRATEGY_ID = "research_strategy_composite_conservative_research_v1"
+SCENARIO_CONTEXT_STRATEGY_ID = "research_strategy_scenario_context_research_v1"
 
 
 class ResearchModel(BaseModel):
@@ -272,7 +273,7 @@ class ResearchRunResult(ResearchModel):
 class ResearchFeatureBuildRequest(ResearchModel):
     market_id: str
     asof_timestamp: datetime | None = None
-    include_sources: list[ResearchFeatureSource] | None = None
+    include_sources: list[str] | None = None
     force: bool = False
 
 

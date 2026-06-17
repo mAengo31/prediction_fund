@@ -1887,3 +1887,165 @@ class ResearchAttributionReportRecord(Base):
     simulated_pnl_by_strategy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     simulated_pnl_by_market: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class ScenarioSeedBundleRecord(Base):
+    __tablename__ = "scenario_seed_bundles"
+
+    seed_bundle_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    market_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    asof_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    seed_source: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    market_title: Mapped[str | None] = mapped_column(String(512))
+    market_description: Mapped[str | None] = mapped_column(Text)
+    rule_snapshot_id: Mapped[str | None] = mapped_column(String(128))
+    rule_snapshot_hash: Mapped[str | None] = mapped_column(String(64))
+    resolution_predicate_id: Mapped[str | None] = mapped_column(String(128))
+    ambiguity_assessment_id: Mapped[str | None] = mapped_column(String(128))
+    market_data_quality_report_id: Mapped[str | None] = mapped_column(String(128))
+    integrity_assessment_id: Mapped[str | None] = mapped_column(String(128))
+    equivalence_assessment_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    divergence_assessment_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    trust_verdict_id: Mapped[str | None] = mapped_column(String(128))
+    source_ref_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    seed_text: Mapped[str] = mapped_column(Text, nullable=False)
+    structured_context: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    output_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class ScenarioSimulationSpecRecord(Base):
+    __tablename__ = "scenario_simulation_specs"
+
+    scenario_spec_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    seed_bundle_id: Mapped[str] = mapped_column(
+        ForeignKey("scenario_seed_bundles.seed_bundle_id"), nullable=False, index=True
+    )
+    market_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    asof_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    scenario_engine: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    scenario_goal: Mapped[str] = mapped_column(Text, nullable=False)
+    horizon_hours: Mapped[int | None] = mapped_column()
+    requested_agent_count: Mapped[int | None] = mapped_column()
+    requested_rounds: Mapped[int | None] = mapped_column()
+    variables: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    constraints: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class ScenarioArtifactRecord(Base):
+    __tablename__ = "scenario_artifacts"
+
+    scenario_artifact_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    scenario_spec_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    seed_bundle_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    market_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    asof_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    artifact_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_path: Mapped[str | None] = mapped_column(Text)
+    raw_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    raw_text: Mapped[str | None] = mapped_column(Text)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    schema_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    is_simulated: Mapped[bool] = mapped_column(nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class ScenarioFeatureSnapshotRecord(Base):
+    __tablename__ = "scenario_feature_snapshots"
+
+    scenario_feature_snapshot_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    scenario_artifact_id: Mapped[str] = mapped_column(
+        ForeignKey("scenario_artifacts.scenario_artifact_id"), nullable=False, index=True
+    )
+    seed_bundle_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    market_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    asof_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    scenario_engine: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    horizon_hours: Mapped[int | None] = mapped_column()
+    scenario_confidence_score: Mapped[int | None] = mapped_column()
+    scenario_uncertainty_score: Mapped[int | None] = mapped_column()
+    sentiment_score: Mapped[int | None] = mapped_column()
+    consensus_score: Mapped[int | None] = mapped_column()
+    polarization_score: Mapped[int | None] = mapped_column()
+    narrative_risk_score: Mapped[int | None] = mapped_column()
+    shock_risk_score: Mapped[int | None] = mapped_column()
+    adoption_or_support_score: Mapped[int | None] = mapped_column()
+    opposition_score: Mapped[int | None] = mapped_column()
+    key_scenario_labels: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    reason_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    source_ref_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    output_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class ScenarioRunRecord(Base):
+    __tablename__ = "scenario_runs"
+
+    scenario_run_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    name: Mapped[str | None] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    asof_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    market_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    mode: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    max_items: Mapped[int] = mapped_column(nullable=False)
+    config_json: Mapped[dict[str, Any]] = mapped_column("config", JSON, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+    seed_bundles_created: Mapped[int] = mapped_column(nullable=False)
+    specs_created: Mapped[int] = mapped_column(nullable=False)
+    artifacts_imported: Mapped[int] = mapped_column(nullable=False)
+    features_created: Mapped[int] = mapped_column(nullable=False)
+    errors_count: Mapped[int] = mapped_column(nullable=False)
+
+
+class ScenarioRunSummaryRecord(Base):
+    __tablename__ = "scenario_run_summaries"
+
+    summary_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    scenario_run_id: Mapped[str] = mapped_column(
+        ForeignKey("scenario_runs.scenario_run_id"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    total_seed_bundles: Mapped[int] = mapped_column(nullable=False)
+    total_artifacts: Mapped[int] = mapped_column(nullable=False)
+    total_features: Mapped[int] = mapped_column(nullable=False)
+    average_scores: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False)
+    reason_code_counts: Mapped[dict[str, int]] = mapped_column(JSON, nullable=False)
+    markets_processed: Mapped[int] = mapped_column(nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)

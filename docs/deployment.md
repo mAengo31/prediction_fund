@@ -95,8 +95,9 @@ run-once fixture ingestion, venue mappings, canonical market data, data-quality 
 integrity analysis, integrity-aware trust-verdict recomputation, replay run creation,
 equivalence candidate generation, equivalence assessment/classes, divergence analysis and
 runs, pretrade checks, simulated paper execution, paper portfolio readback, deterministic
-research strategies, research feature/proposal generation, proposal evaluation, research
-summary and attribution readback, replay summary readback, replay
+research strategies, scenario fixture import, scenario feature readback, research
+feature/proposal generation, proposal evaluation, research summary and attribution
+readback, replay summary readback, replay
 market-data/equivalence/divergence/paper/research metadata, and the `integrity_gate_v1`,
 `pretrade_gate_v1`, `paper_sim_gate_v1`, and `research_policy_v1` replay policies:
 
@@ -129,13 +130,13 @@ CI runs the normal SQLite/unit path and a separate `postgres-integration` job. T
 job starts a service container, runs Alembic against Postgres, and then runs tests marked
 `postgres`.
 
-## C. Staging Deployment Recommendation
+## C. Staging Deployment Target
 
 Use a containerized deployment for staging. Render is acceptable for low-friction staging.
 Fly.io is acceptable for app runtime, but prefer managed Postgres elsewhere unless you are
 deliberately choosing unmanaged Postgres.
 
-Recommended staging settings:
+Staging settings:
 
 - Store `PREDICTION_DESK_API_TOKEN` as a platform secret or environment variable.
 - Set `APP_ENV=staging`.

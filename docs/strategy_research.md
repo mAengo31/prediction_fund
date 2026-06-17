@@ -6,8 +6,8 @@ strategies, creates hypothetical intent proposals, evaluates each proposal throu
 Pre-Trade Gate v1, optionally routes approved hypothetical intents through the Paper
 Execution Simulator, and stores simulated attribution summaries.
 
-This is not live trading. Research signals and proposals are hypotheses, not
-recommendations. The harness does not route orders, connect to venues, use credentials,
+This is not live trading. Research signals and proposals are hypotheses, not execution
+instructions. The harness does not route orders, connect to venues, use credentials,
 or access live accounts.
 
 ## ResearchStrategyDefinition
@@ -24,15 +24,17 @@ Default v1 strategies are deterministic and idempotent:
 - `integrity_pass_filter_v1`
 - `divergence_research_hypothesis_v1`
 - `composite_conservative_research_v1`
+- `scenario_context_research_v1`
 
 ## ResearchFeatureSnapshot
 
 `ResearchFeatureSnapshot` is a generic as-of feature container. V1 can build features
 from market data, resolution/trust verdicts, integrity assessments, equivalence
-assessments, divergence assessments, pre-trade decisions, and paper snapshots.
+assessments, divergence assessments, pre-trade decisions, paper snapshots, and scenario
+feature snapshots.
 
-`feature_source=SCENARIO_SIMULATION_PLACEHOLDER` is reserved for a later MiroFish-style
-slow-lane feature source. This round does not implement scenario simulation.
+`feature_source=SCENARIO_SIMULATION_PLACEHOLDER` carries local, imported scenario features.
+V1 does not execute MiroFish or call external services.
 
 ## ResearchSignal
 
@@ -40,8 +42,7 @@ slow-lane feature source. This round does not implement scenario simulation.
 strength, confidence, action bias, reason codes, source feature IDs, source reference IDs,
 and deterministic input/output hashes.
 
-Signals are labeled as research signals. They are not recommendations and do not imply
-live venue action.
+Signals are labeled as research signals. They are not live venue action.
 
 ## ResearchIntentProposal
 
@@ -100,12 +101,15 @@ proposal for the lower aligned price side when that side can be determined safel
 divergence context to pass conservative filters. Missing critical data produces a
 review-only signal and no proposal.
 
+`scenario_context_research_v1` uses scenario features only to generate `WATCH` or
+`REVIEW_ONLY` signals. It never creates proposals.
+
 ## No-Lookahead Behavior
 
 Research feature building uses repository methods that honor as-of semantics:
 
 - Market data uses `available_at <= asof_timestamp`.
-- Integrity, equivalence, divergence, pre-trade, paper, and research list methods use
+- Integrity, equivalence, divergence, pre-trade, paper, scenario, and research list methods use
   `available_at <= asof_timestamp` where applicable.
 - Trust and rule context use existing point-in-time repository semantics.
 

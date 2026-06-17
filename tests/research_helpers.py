@@ -233,4 +233,6 @@ def _family_for_source(source: ResearchFeatureSource) -> ResearchFeatureFamily:
         return ResearchFeatureFamily.RISK
     if source == ResearchFeatureSource.PAPER:
         return ResearchFeatureFamily.SIMULATED_EXECUTION
+    if source == ResearchFeatureSource.SCENARIO_SIMULATION_PLACEHOLDER:
+        return ResearchFeatureFamily.SCENARIO
     return ResearchFeatureFamily.OTHER

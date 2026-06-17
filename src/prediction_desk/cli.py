@@ -60,6 +60,10 @@ from prediction_desk.research.models import ResearchRunConfig
 from prediction_desk.research.runner import ResearchRunError, run_research_simulation
 from prediction_desk.research.service import ResearchService, ResearchServiceError
 from prediction_desk.resolution.service import ResolutionCorpusError, ResolutionCorpusService
+from prediction_desk.scenario.enums import ScenarioRunMode
+from prediction_desk.scenario.models import ScenarioRunConfig
+from prediction_desk.scenario.runner import ScenarioRunError, run_scenario_import
+from prediction_desk.scenario.service import ScenarioService, ScenarioServiceError
 from prediction_desk.scoring.trust_verdict import build_trust_verdict
 
 app = typer.Typer(no_args_is_help=True)
@@ -2797,10 +2801,299 @@ def research_attribution_command(
     )
 
 
+@app.command("scenario-build-seed")
+def scenario_build_seed_command(
+    market_id: Annotated[str, typer.Option("--market-id", help="Market ID.")],
+    asof: Annotated[str | None, typer.Option("--asof", help="As-of ISO timestamp.")] = None,
+    force: Annotated[bool, typer.Option("--force")] = False,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read/write.")
+    ] = None,
+) -> None:
+    """Builds a deterministic scenario seed bundle."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            bundle = ScenarioService(
+                PredictionMarketRepository(session)
+            ).build_seed_bundle_for_market(
+                market_id,
+                _parse_datetime(asof) if asof else datetime.now(tz=UTC),
+                force=force,
+            )
+        except ScenarioServiceError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+    _print_table(
+        headers=("seed_bundle_id", "market_id", "asof_timestamp", "source_ref_ids"),
+        rows=[
+            (
+                bundle.seed_bundle_id,
+                bundle.market_id,
+                bundle.asof_timestamp.isoformat(),
+                ",".join(bundle.source_ref_ids),
+            )
+        ],
+    )
+
+
+@app.command("scenario-import-fixtures")
+def scenario_import_fixtures_command(
+    market_id: Annotated[
+        list[str] | None,
+        typer.Option("--market-id", help="Market ID; repeatable."),
+    ] = None,
+    asof: Annotated[str | None, typer.Option("--asof", help="As-of ISO timestamp.")] = None,
+    fixture_dir: Annotated[
+        str | None,
+        typer.Option("--fixture-dir", help="Local fixture directory."),
+    ] = None,
+    force: Annotated[bool, typer.Option("--force")] = False,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read/write.")
+    ] = None,
+) -> None:
+    """Imports local scenario fixture artifacts."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            session_repo = PredictionMarketRepository(session)
+            service = ScenarioService(session_repo)
+            artifacts = service.import_fixture_artifacts(
+                market_ids=list(market_id or []) or None,
+                asof_timestamp=_parse_datetime(asof) if asof else datetime.now(tz=UTC),
+                fixture_dir=fixture_dir,
+                force=force,
+            )
+            features = [
+                service.normalize_scenario_artifact(
+                    artifact.scenario_artifact_id,
+                    force=force,
+                )
+                for artifact in artifacts
+            ]
+        except ScenarioServiceError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+    _print_table(
+        headers=("artifact_id", "market_id", "feature_id", "reason_codes"),
+        rows=[
+            (
+                artifact.scenario_artifact_id,
+                artifact.market_id,
+                feature.scenario_feature_snapshot_id,
+                ",".join(feature.reason_codes),
+            )
+            for artifact, feature in zip(artifacts, features, strict=False)
+        ],
+    )
+
+
+@app.command("scenario-import-manual")
+def scenario_import_manual_command(
+    file_path: Annotated[str, typer.Option("--file-path", help="Local JSON file path.")],
+    market_id: Annotated[str | None, typer.Option("--market-id", help="Market ID.")] = None,
+    asof: Annotated[str | None, typer.Option("--asof", help="As-of ISO timestamp.")] = None,
+    seed_bundle_id: Annotated[
+        str | None,
+        typer.Option("--seed-bundle-id", help="Seed bundle ID."),
+    ] = None,
+    force: Annotated[bool, typer.Option("--force")] = False,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read/write.")
+    ] = None,
+) -> None:
+    """Imports one local JSON scenario artifact."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            artifact = ScenarioService(
+                PredictionMarketRepository(session)
+            ).import_manual_artifact(
+                file_path=file_path,
+                market_id=market_id,
+                asof_timestamp=_parse_datetime(asof) if asof else datetime.now(tz=UTC),
+                seed_bundle_id=seed_bundle_id,
+                force=force,
+            )
+        except ScenarioServiceError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+    _print_table(
+        headers=("artifact_id", "market_id", "source_type", "payload_hash"),
+        rows=[
+            (
+                artifact.scenario_artifact_id,
+                artifact.market_id,
+                artifact.source_type.value,
+                artifact.payload_hash,
+            )
+        ],
+    )
+
+
+@app.command("scenario-normalize-artifact")
+def scenario_normalize_artifact_command(
+    artifact_id: Annotated[str, typer.Option("--artifact-id", help="Artifact ID.")],
+    force: Annotated[bool, typer.Option("--force")] = False,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read/write.")
+    ] = None,
+) -> None:
+    """Normalizes one scenario artifact into a feature snapshot."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            feature = ScenarioService(
+                PredictionMarketRepository(session)
+            ).normalize_scenario_artifact(artifact_id, force=force)
+        except ScenarioServiceError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+    _print_table(
+        headers=("feature_id", "market_id", "confidence", "uncertainty", "reason_codes"),
+        rows=[
+            (
+                feature.scenario_feature_snapshot_id,
+                feature.market_id,
+                feature.scenario_confidence_score,
+                feature.scenario_uncertainty_score,
+                ",".join(feature.reason_codes),
+            )
+        ],
+    )
+
+
+@app.command("scenario-latest")
+def scenario_latest_command(
+    market_id: Annotated[str, typer.Option("--market-id", help="Market ID.")],
+    asof: Annotated[str | None, typer.Option("--asof", help="As-of ISO timestamp.")] = None,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read.")
+    ] = None,
+) -> None:
+    """Prints the latest scenario feature for a market."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        feature = ScenarioService(
+            PredictionMarketRepository(session)
+        ).get_latest_scenario_feature_asof(
+            market_id,
+            _parse_datetime(asof) if asof else datetime.now(tz=UTC),
+        )
+    rows = []
+    if feature is not None:
+        rows.append(
+            (
+                feature.scenario_feature_snapshot_id,
+                feature.market_id,
+                feature.scenario_confidence_score,
+                feature.scenario_uncertainty_score,
+                ",".join(feature.reason_codes),
+            )
+        )
+    _print_table(
+        headers=("feature_id", "market_id", "confidence", "uncertainty", "reason_codes"),
+        rows=rows,
+    )
+
+
+@app.command("scenario-run")
+def scenario_run_command(
+    name: Annotated[str | None, typer.Option("--name", help="Run name.")] = None,
+    asof: Annotated[str | None, typer.Option("--asof", help="As-of ISO timestamp.")] = None,
+    market_id: Annotated[
+        list[str] | None,
+        typer.Option("--market-id", help="Market ID; repeatable."),
+    ] = None,
+    mode: Annotated[str, typer.Option("--mode", help="Scenario run mode.")] = "IMPORT_FIXTURES",
+    max_items: Annotated[int, typer.Option("--max-items")] = 100,
+    fixture_dir: Annotated[
+        str | None,
+        typer.Option("--fixture-dir", help="Local fixture directory."),
+    ] = None,
+    force: Annotated[bool, typer.Option("--force")] = False,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read/write.")
+    ] = None,
+) -> None:
+    """Runs a deterministic scenario import workflow."""
+
+    config = ScenarioRunConfig(
+        name=name,
+        asof_timestamp=_parse_datetime(asof) if asof else datetime.now(tz=UTC),
+        market_ids=list(market_id or []) or None,
+        mode=ScenarioRunMode(mode),
+        max_items=max_items,
+        fixture_dir=fixture_dir,
+        force=force,
+    )
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            result = run_scenario_import(config, repo=PredictionMarketRepository(session))
+        except ScenarioRunError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+    _print_table(
+        headers=("run_id", "artifacts", "features", "markets", "errors"),
+        rows=[
+            (
+                result.run.scenario_run_id,
+                result.summary.total_artifacts,
+                result.summary.total_features,
+                result.summary.markets_processed,
+                result.run.errors_count,
+            )
+        ],
+    )
+
+
+@app.command("scenario-runs")
+def scenario_runs_command(
+    limit: Annotated[int, typer.Option("--limit")] = 50,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read.")
+    ] = None,
+) -> None:
+    """Lists scenario runs."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        runs = ScenarioService(PredictionMarketRepository(session)).list_scenario_runs(
+            limit=limit,
+        )
+    _print_table(
+        headers=("run_id", "mode", "status", "features", "errors"),
+        rows=[
+            (
+                run.scenario_run_id,
+                run.mode.value,
+                run.status.value,
+                run.features_created,
+                run.errors_count,
+            )
+            for run in runs
+        ],
+    )
+
+
 def _print_table(headers: tuple[str, ...], rows: Sequence[Sequence[object]]) -> None:
     normalized_rows = [tuple(str(value) for value in row) for row in rows]
     widths = [
-        max(len(headers[index]), *(len(row[index]) for row in normalized_rows))
+        max([len(headers[index])] + [len(row[index]) for row in normalized_rows])
         for index in range(len(headers))
     ]
     typer.echo(" | ".join(header.ljust(widths[index]) for index, header in enumerate(headers)))
