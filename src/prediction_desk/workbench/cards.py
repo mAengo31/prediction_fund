@@ -8,6 +8,7 @@ from typing import Any
 
 from prediction_desk.persistence.database import session_scope
 from prediction_desk.persistence.repositories import PredictionMarketRepository
+from prediction_desk.workbench.evidence import latest_data_gaps_for_market
 from prediction_desk.workbench.models import (
     CrossVenueComparisonCard,
     MarketDecisionCard,
@@ -114,7 +115,7 @@ def _build_market_decision_card(
         limit=25,
     )
     scenario = repo.get_latest_scenario_feature_asof(market_id, asof_timestamp)
-    gaps = repo.list_data_gaps(market_id=market_id, asof_timestamp=asof_timestamp, limit=100)
+    gaps = latest_data_gaps_for_market(repo, market_id, asof_timestamp, limit=100)
     priority_score, reason_codes = score_review_context(
         quality_report=quality,
         integrity_assessment=integrity,

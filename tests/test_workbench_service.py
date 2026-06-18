@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from prediction_desk.dataops.enums import CoverageScopeType
-from prediction_desk.dataops.gaps import detect_data_gaps
+from prediction_desk.dataops.enums import CoverageScopeType, DataGapSeverity, DataGapType
+from prediction_desk.dataops.models import DataCoverageReport, DataGap
 from prediction_desk.equivalence.service import EquivalenceService
 from prediction_desk.examples.sample_markets import load_sample_data
 from prediction_desk.persistence.database import build_engine, build_session_factory, init_db
@@ -28,12 +28,85 @@ def test_queue_prioritizes_data_gaps(tmp_path: Path) -> None:
     factory = _sample_factory(tmp_path, "workbench_data_gap.db")
     with factory.begin() as session:
         repo = PredictionMarketRepository(session)
-        detect_data_gaps(CoverageScopeType.GLOBAL, ASOF, repo=repo)
+        market_id = repo.list_markets(limit=1)[0].market_id
+        report = DataCoverageReport(
+            coverage_report_id="coverage_missing_price_batch",
+            asof_timestamp=ASOF,
+            created_at=ASOF + timedelta(minutes=1),
+            scope_type=CoverageScopeType.GLOBAL,
+            total_markets=1,
+            missing_price_markets=1,
+            coverage_score=50,
+            reason_codes=["MISSING_PRICE_SNAPSHOT"],
+        )
+        repo.save_data_coverage_report(report)
+        repo.save_data_gap(
+            DataGap(
+                data_gap_id="current_missing_price_gap",
+                coverage_report_id=report.coverage_report_id,
+                market_id=market_id,
+                gap_type=DataGapType.MISSING_PRICE_SNAPSHOT,
+                severity=DataGapSeverity.WARNING,
+                end_time=ASOF,
+                detected_at=ASOF + timedelta(minutes=1),
+                observed_count=0,
+                reason_code="MISSING_PRICE_SNAPSHOT",
+            )
+        )
         items = WorkbenchService(repo).build_queue(ASOF, limit=10)
 
     assert items
     assert any("MISSING_PRICE_SNAPSHOT" in item.reason_codes for item in items)
     assert items[0].priority_score >= items[-1].priority_score
+
+
+def test_queue_uses_latest_gap_batch_not_cumulative_gaps(tmp_path: Path) -> None:
+    factory = _sample_factory(tmp_path, "workbench_current_gap_batch.db")
+    with factory.begin() as session:
+        repo = PredictionMarketRepository(session)
+        market_id = repo.list_markets(limit=1)[0].market_id
+        stale_report = DataCoverageReport(
+            coverage_report_id="coverage_stale_gap_batch",
+            asof_timestamp=ASOF,
+            created_at=ASOF,
+            scope_type=CoverageScopeType.GLOBAL,
+            total_markets=1,
+            missing_price_markets=1,
+            coverage_score=50,
+            reason_codes=["MISSING_PRICE_SNAPSHOT"],
+        )
+        repo.save_data_coverage_report(stale_report)
+        repo.save_data_gap(
+            DataGap(
+                data_gap_id="stale_missing_price_gap",
+                coverage_report_id=stale_report.coverage_report_id,
+                market_id=market_id,
+                gap_type=DataGapType.MISSING_PRICE_SNAPSHOT,
+                severity=DataGapSeverity.WARNING,
+                end_time=ASOF,
+                detected_at=ASOF,
+                observed_count=0,
+                reason_code="MISSING_PRICE_SNAPSHOT",
+            )
+        )
+        repo.save_data_coverage_report(
+            DataCoverageReport(
+                coverage_report_id="coverage_current_gap_batch",
+                asof_timestamp=ASOF,
+                created_at=ASOF + timedelta(minutes=1),
+                scope_type=CoverageScopeType.GLOBAL,
+                total_markets=1,
+                markets_with_price_snapshots=1,
+                coverage_score=100,
+                reason_codes=[],
+            )
+        )
+        item = WorkbenchService(repo).build_queue(ASOF, market_ids=[market_id])[0]
+        card = WorkbenchService(repo).build_decision_card(market_id, ASOF)
+
+    assert "MISSING_PRICE_SNAPSHOT" not in item.reason_codes
+    assert "MISSING_PRICE_SNAPSHOT" not in card.review_reason_codes
+    assert card.data_gap_summary["gap_count"] == 0
 
 
 def test_queue_prioritizes_pretrade_blocks(tmp_path: Path) -> None:

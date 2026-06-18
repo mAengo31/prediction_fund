@@ -49,6 +49,13 @@ TABLES: tuple[str, ...] = (
     "data_coverage_reports",
     "data_gaps",
     "data_retention_policies",
+    "desk_watchlists",
+    "market_review_queue_items",
+    "market_decision_cards",
+    "cross_venue_comparison_cards",
+    "desk_review_notes",
+    "workbench_runs",
+    "workbench_run_summaries",
 )
 
 

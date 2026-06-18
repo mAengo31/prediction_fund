@@ -3281,6 +3281,7 @@ class PredictionMarketRepository:
         self,
         *,
         market_id: str | None = None,
+        coverage_report_id: str | None = None,
         asof_timestamp: datetime | None = None,
         limit: int = 500,
         offset: int = 0,
@@ -3293,6 +3294,8 @@ class PredictionMarketRepository:
         )
         if market_id is not None:
             stmt = stmt.where(DataGapRecord.market_id == market_id)
+        if coverage_report_id is not None:
+            stmt = stmt.where(DataGapRecord.coverage_report_id == coverage_report_id)
         if asof_timestamp is not None:
             stmt = stmt.where(DataGapRecord.end_time <= asof_timestamp)
         return [_data_gap_from_record(record) for record in self.session.scalars(stmt)]

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from prediction_desk.persistence.database import session_scope
 from prediction_desk.persistence.repositories import PredictionMarketRepository
 from prediction_desk.workbench.enums import ReviewStatus
+from prediction_desk.workbench.evidence import latest_data_gaps_for_market
 from prediction_desk.workbench.models import (
     MarketReviewQueueItem,
     workbench_object_id,
@@ -78,7 +79,7 @@ def _build_market_review_queue(
             if _as_utc(order.available_at) <= _as_utc(asof_timestamp)
         ]
         scenario = repo.get_latest_scenario_feature_asof(market_id, asof_timestamp)
-        gaps = repo.list_data_gaps(market_id=market_id, asof_timestamp=asof_timestamp, limit=100)
+        gaps = latest_data_gaps_for_market(repo, market_id, asof_timestamp, limit=100)
         score, reason_codes = score_review_context(
             quality_report=quality,
             integrity_assessment=integrity,
