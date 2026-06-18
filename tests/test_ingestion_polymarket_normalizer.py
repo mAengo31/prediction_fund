@@ -73,6 +73,33 @@ def test_polymarket_orderbook_can_use_token_targeting_metadata() -> None:
     assert normalized.orderbook_snapshot.metadata["token_id"].startswith("111111")
 
 
+def test_polymarket_orderbook_snapshot_id_stays_bounded_for_long_token_ids() -> None:
+    payload = _payload("orderbook_weather.json")
+    condition_id = "0x" + ("a" * 64)
+    token_id = "9" * 77
+    token_payload = payload.model_copy(
+        update={
+            "external_id": token_id,
+            "response_payload": {
+                **payload.response_payload,
+                "asset_id": token_id,
+                "market": condition_id,
+            },
+            "metadata": {
+                **payload.metadata,
+                "canonical_market_id": f"polymarket_market_{condition_id}",
+                "condition_id": condition_id,
+                "token_id": token_id,
+            },
+        }
+    )
+
+    [normalized] = normalize_polymarket_payload(token_payload)
+
+    assert normalized.orderbook_snapshot is not None
+    assert len(normalized.orderbook_snapshot.snapshot_id) <= 128
+
+
 def test_polymarket_price_history_fixture_maps_into_price_snapshot() -> None:
     payload = _payload("price_history_weather.json")
     [normalized] = normalize_polymarket_payload(payload)

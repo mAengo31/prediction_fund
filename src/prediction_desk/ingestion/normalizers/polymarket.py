@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import datetime
@@ -281,8 +282,8 @@ def _normalize_orderbook_payload(raw_payload: RawVenuePayload) -> NormalizedVenu
     return NormalizedVenuePayload(
         orderbook_snapshot=OrderBookSnapshot(
             snapshot_id=(
-                f"ob_polymarket_{_slug(external_market_id)}_"
-                f"{_slug(token_id or 'unknown')}_{raw_payload.response_hash[:16]}"
+                f"ob_polymarket_{_slug(external_market_id)[:32]}_"
+                f"{_short_digest(token_id or 'unknown')}_{raw_payload.response_hash[:16]}"
             ),
             market_id=market_id,
             captured_at=raw_payload.captured_at,
@@ -629,6 +630,10 @@ def _event_id(external_event_id: str) -> str:
 def _slug(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
     return slug or "unknown"
+
+
+def _short_digest(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
 
 
 def _normalize_space(value: str) -> str:
