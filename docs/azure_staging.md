@@ -140,7 +140,7 @@ in `venue_outcome_token_mappings`. A `MARKET_LIST` discovery pilot archived one 
 catalog payload, created one real Polymarket market, and persisted two active token
 mappings for the market `New Rihanna Album before GTA VI?`.
 
-A one-market targeted Polymarket follow-up then used:
+A one-market targeted Polymarket follow-up now succeeds with all three endpoint types:
 
 ```bash
 API_BASE_URL="https://prediction-desk-staging-api.bluebush-22f9863f.centralus.azurecontainerapps.io" \
@@ -153,26 +153,28 @@ MAX_PAYLOADS=5 \
 scripts/staging_public_read_pilot.sh
 ```
 
-Result:
+Final validated result:
 
-- Status: `PARTIAL`
+- Status: `COMPLETED`
 - Venue: `polymarket`
-- Payloads archived: 3
+- Payloads archived: 5
 - Markets processed: 1
-- Errors: 2
+- Errors: 0
+- New market detail payloads: 1
 - New orderbook snapshots: 2
-- New price snapshots: 2
+- New price snapshots: 52
 - New liquidity snapshots: 2
 - New quality reports: 3
-- Coverage score moved from `82` to `89`
+- Coverage score remained `89` because the selected market already had current market-data
+  coverage
 
-The archived payloads were one Gamma `MARKET_DETAIL` payload and two CLOB `ORDERBOOK`
-payloads. The two errors were public CLOB `PRICE_HISTORY` responses returning `400 Bad
-Request` for the token IDs. These were recorded as ingestion errors without fabricating
-history. The targeted Polymarket market now has rule, orderbook, price, and liquidity
-coverage. Remaining latest gaps are rule-snapshot gaps for other markets and stale-data
-warnings. This remains public-read only: it does not pass credentials, wallets, private
-keys, trading instructions, or authenticated CLOB requests.
+The archived payloads were one Gamma `MARKET_DETAIL` payload, two CLOB `ORDERBOOK`
+payloads, and two CLOB `PRICE_HISTORY` payloads using token-level `market` parameters with
+`interval=1d` and `fidelity=60`. The targeted Polymarket market now has rule, orderbook,
+price, liquidity, and token-level price-history coverage. Remaining latest gaps are
+rule-snapshot gaps for other markets and stale-data warnings. This remains public-read
+only: it does not pass credentials, wallets, private keys, trading instructions, or
+authenticated CLOB requests.
 
 Data gaps are append-only operational evidence. A targeted run may improve the latest
 coverage report while also adding new `data_gaps` rows from the latest detection pass.

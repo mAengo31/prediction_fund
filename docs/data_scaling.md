@@ -139,11 +139,11 @@ targeted follow-up is token-aware: catalog/detail normalization persists Gamma m
 condition/question IDs, outcome labels, `enableOrderBook`, and CLOB token/asset IDs in
 `venue_outcome_token_mappings`. Polymarket `MARKET_DETAIL` resolves the Gamma market ID
 from mapping metadata, and Polymarket `ORDERBOOK` resolves token/asset IDs from the
-outcome-token mapping. Polymarket `PRICE_HISTORY` also resolves token/asset IDs, but the
-first Azure staging pilot received public CLOB `400 Bad Request` responses for token-level
-history requests; treat price history as explicit partial-run evidence until the required
-public endpoint shape is validated. If a Gamma ID or token ID is missing, the collection
-run records a safe missing-identifier error instead of guessing.
+outcome-token mapping. Polymarket `PRICE_HISTORY` also resolves token/asset IDs and uses
+token-level public CLOB requests with `interval=1d` and `fidelity=60`. If a Gamma ID is
+missing from the venue mapping, targeted detail follow-up can fall back to active
+outcome-token mappings that still carry the Gamma ID. If a Gamma ID or token ID is still
+missing, the collection run records a safe missing-identifier error instead of guessing.
 
 Example token-aware Polymarket collection:
 
