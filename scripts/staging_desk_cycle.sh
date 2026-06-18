@@ -271,6 +271,8 @@ def main() -> int:
         {"queue_name": "staging_desk_cycle", "latest_only": "true"}
     )
     queue_summary = api_call("GET", f"/api/v1/workbench/queues/summary?{summary_query}")
+    status_query = parse.urlencode({"queue_name": "staging_desk_cycle"})
+    workbench_status = api_call("GET", f"/api/v1/workbench/status?{status_query}")
     print(
         "workbench_queue "
         f"items={len(queue_items)} "
@@ -278,6 +280,13 @@ def main() -> int:
         f"top_reasons={json.dumps(queue_summary.get('top_reason_codes', {}), sort_keys=True)} "
         f"hard_escalators={json.dumps(queue_summary.get('hard_escalator_counts', {}), sort_keys=True)} "
         f"soft_escalators={json.dumps(queue_summary.get('soft_escalator_counts', {}), sort_keys=True)}"
+    )
+    print(
+        "workbench_status "
+        f"review_status_counts={json.dumps(workbench_status.get('review_status_counts', {}), sort_keys=True)} "
+        f"unresolved_critical={workbench_status.get('unresolved_critical_count')} "
+        f"unresolved_high={workbench_status.get('unresolved_high_count')} "
+        f"public_read_schedule={workbench_status.get('public_read_schedule_status')}"
     )
 
     top_items = sorted(queue_items, key=lambda item: (-item["priority_score"], item["market_id"]))[:10]

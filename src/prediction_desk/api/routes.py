@@ -216,12 +216,14 @@ from prediction_desk.workbench.models import (
     WorkbenchComparisonCardRequest,
     WorkbenchDecisionCardRequest,
     WorkbenchQueueBuildRequest,
+    WorkbenchQueueItemStatusUpdateRequest,
     WorkbenchQueueSummary,
     WorkbenchRun,
     WorkbenchRunConfig,
     WorkbenchRunRequest,
     WorkbenchRunResult,
     WorkbenchRunSummary,
+    WorkbenchStatusSummary,
 )
 from prediction_desk.workbench.runner import WorkbenchRunError, run_workbench_build
 from prediction_desk.workbench.service import WorkbenchService, WorkbenchServiceError
@@ -3010,6 +3012,8 @@ def list_latest_workbench_queue_items(
     queue_name: str | None = None,
     priority_bucket: ReviewPriorityBucket | None = None,
     review_status: ReviewStatus | None = None,
+    include_resolved: bool = False,
+    include_dismissed: bool = False,
     asof_timestamp: datetime | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -3019,6 +3023,8 @@ def list_latest_workbench_queue_items(
         queue_name=queue_name,
         priority_bucket=priority_bucket,
         review_status=review_status,
+        include_resolved=include_resolved,
+        include_dismissed=include_dismissed,
         asof_timestamp=asof_timestamp,
         limit=limit,
         offset=offset,
@@ -3034,12 +3040,50 @@ def summarize_workbench_queue(
     repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
     queue_name: str | None = None,
     latest_only: bool = True,
+    include_resolved: bool = False,
+    include_dismissed: bool = False,
     asof_timestamp: datetime | None = None,
 ) -> WorkbenchQueueSummary:
     return WorkbenchService(repo).summarize_queue(
         queue_name=queue_name,
         latest_only=latest_only,
+        include_resolved=include_resolved,
+        include_dismissed=include_dismissed,
         asof_timestamp=asof_timestamp,
+    )
+
+
+@v1_router.post(
+    "/workbench/queues/items/{queue_item_id}/status",
+    response_model=MarketReviewQueueItem,
+    dependencies=[Depends(require_api_token)],
+)
+def update_workbench_queue_item_status(
+    queue_item_id: str,
+    request_body: WorkbenchQueueItemStatusUpdateRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> MarketReviewQueueItem:
+    try:
+        return WorkbenchService(repo).update_queue_item_status(queue_item_id, request_body)
+    except WorkbenchServiceError as exc:
+        raise _workbench_http_error(exc) from exc
+
+
+@v1_router.get(
+    "/workbench/status",
+    response_model=WorkbenchStatusSummary,
+    dependencies=[Depends(require_api_token)],
+)
+def get_workbench_status(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    queue_name: str | None = None,
+    asof_timestamp: datetime | None = None,
+    limit: Annotated[int, Query(ge=1, le=5000)] = 1000,
+) -> WorkbenchStatusSummary:
+    return WorkbenchService(repo).get_status(
+        queue_name=queue_name,
+        asof_timestamp=asof_timestamp,
+        limit=limit,
     )
 
 

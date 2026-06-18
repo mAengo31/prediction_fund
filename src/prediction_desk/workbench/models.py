@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from prediction_desk.workbench.enums import (
     DeskReviewNoteType,
     RecommendedReviewAction,
+    ReviewOutcome,
     ReviewPriorityBucket,
     ReviewStatus,
     WorkbenchRunStatus,
@@ -184,6 +185,26 @@ class WorkbenchQueueSummary(WorkbenchModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class WorkbenchStatusSummary(WorkbenchModel):
+    generated_at: datetime
+    queue_name: str | None = None
+    latest_queue_item_count: int = 0
+    priority_bucket_counts: dict[str, int] = Field(default_factory=dict)
+    review_status_counts: dict[str, int] = Field(default_factory=dict)
+    top_reason_codes: dict[str, int] = Field(default_factory=dict)
+    top_hard_escalators: dict[str, int] = Field(default_factory=dict)
+    top_soft_escalators: dict[str, int] = Field(default_factory=dict)
+    unresolved_critical_count: int = 0
+    unresolved_high_count: int = 0
+    latest_workbench_run_id: str | None = None
+    latest_coverage_score: int | None = None
+    latest_gap_counts: dict[str, int] = Field(default_factory=dict)
+    latest_public_read_collection_run_status: str | None = None
+    latest_public_read_collection_run_id: str | None = None
+    public_read_schedule_status: str = "HELD"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class WorkbenchRunConfig(WorkbenchModel):
     name: str | None = None
     asof_timestamp: datetime
@@ -224,6 +245,23 @@ class WorkbenchQueueBuildRequest(WorkbenchModel):
     queue_name: str = "default_review_queue"
     limit: int = Field(default=500, gt=0, le=1000)
     force: bool = False
+
+
+class WorkbenchQueueItemStatusUpdateRequest(WorkbenchModel):
+    review_status: ReviewStatus
+    reviewed_by: str | None = None
+    review_outcome: ReviewOutcome | None = None
+    review_reason: str | None = None
+    note_text: str | None = None
+    tags: list[str] = Field(default_factory=list)
+
+    @field_validator("review_reason", "note_text")
+    @classmethod
+    def _strip_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
 
 
 class WorkbenchDecisionCardRequest(WorkbenchModel):

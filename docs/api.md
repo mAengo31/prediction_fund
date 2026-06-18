@@ -182,6 +182,8 @@ Common API failures use this envelope:
 | `GET` | `/api/v1/workbench/queues/items` | Configurable | List review queue items. |
 | `GET` | `/api/v1/workbench/queues/latest` | Configurable | List the latest active review queue item per market. |
 | `GET` | `/api/v1/workbench/queues/summary` | Configurable | Summarize queue priority, action, reason, and escalator counts. |
+| `POST` | `/api/v1/workbench/queues/items/{queue_item_id}/status` | Configurable | Mark a review queue item `IN_REVIEW`, `RESOLVED`, `DISMISSED`, or `WATCHING`, optionally with a linked desk note. |
+| `GET` | `/api/v1/workbench/status` | Configurable | Daily desk summary for active queue counts, review status counts, coverage/gaps, and schedule posture. |
 | `POST` | `/api/v1/workbench/markets/{market_id}/decision-card` | Configurable | Build a market decision card for desk review. |
 | `GET` | `/api/v1/workbench/markets/{market_id}/decision-card/latest` | Configurable | Latest stored decision card for one market. |
 | `POST` | `/api/v1/workbench/equivalence/{equivalence_assessment_id}/comparison-card` | Configurable | Build a cross-venue comparison review card. |

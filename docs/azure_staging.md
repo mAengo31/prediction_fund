@@ -356,13 +356,40 @@ keeps historical rows append-only but adds a latest active queue view and score 
 
 - `GET /api/v1/workbench/queues/latest`
 - `GET /api/v1/workbench/queues/summary`
+- `GET /api/v1/workbench/status`
 - `prediction-desk workbench-queue --latest`
 - `prediction-desk workbench-queue-summary`
+- `prediction-desk workbench-status`
 
 The calibrated queue treats low data quality and ordinary missing-rule context as review
 signals without automatically making them critical. Critical priority is reserved for hard
 review blockers such as hard pre-trade no-trade restrictions, integrity no-trade context
 not caused only by sparse data, or divergence `DO_NOT_COMPARE`.
+
+Daily desk review should use the latest active queue. `RESOLVED` and `DISMISSED` items
+are hidden by default but remain in append-only queue history. Operators can mark items
+`IN_REVIEW`, `WATCHING`, `RESOLVED`, or `DISMISSED` through
+`POST /api/v1/workbench/queues/items/{queue_item_id}/status` or:
+
+```bash
+prediction-desk workbench-update-item-status \
+  --queue-item-id queue_item_... \
+  --review-status WATCHING \
+  --reviewed-by operator \
+  --review-outcome NEEDS_MORE_DATA \
+  --review-reason "Keep in daily review until the next fixture cycle."
+```
+
+The status update is desk metadata only. It does not change market data, pre-trade logic,
+paper simulation, venue state, or execution behavior.
+
+Read the daily staging status without running a desk cycle:
+
+```bash
+API_BASE_URL="https://prediction-desk-staging-api.bluebush-22f9863f.centralus.azurecontainerapps.io" \
+PREDICTION_DESK_API_TOKEN="<secret>" \
+scripts/staging_workbench_status.sh
+```
 
 ## DB Inspection
 
@@ -385,7 +412,15 @@ does not call trading endpoints. Enable it only after fixture smoke passes and b
 confirmed:
 
 ```bash
-DEPLOY_FIXTURE_DATAOPS_JOB=true CONFIRM_AZURE_STAGING_DEPLOY=true scripts/azure_deploy_staging.sh
+CONFIRM_ENABLE_FIXTURE_SCHEDULE=true \
+DATABASE_URL="<staging database url>" \
+scripts/azure_enable_fixture_schedule.sh
+```
+
+Disable it with:
+
+```bash
+CONFIRM_DISABLE_FIXTURE_SCHEDULE=true scripts/azure_disable_fixture_schedule.sh
 ```
 
 ## Public-Read Pilot

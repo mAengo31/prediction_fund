@@ -5,7 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from prediction_desk.persistence.repositories import PredictionMarketRepository
-from prediction_desk.workbench.enums import ReviewPriorityBucket
+from prediction_desk.workbench.enums import ReviewOutcome, ReviewPriorityBucket, ReviewStatus
+from prediction_desk.workbench.models import WorkbenchQueueItemStatusUpdateRequest
 from prediction_desk.workbench.scoring import (
     priority_bucket,
     score_review_context_details,
@@ -186,3 +187,47 @@ def test_latest_queue_view_keeps_history_but_returns_one_item_per_market(
     assert len(latest) == 1
     assert latest[0].queue_item_id == second[0].queue_item_id
     assert summary.total_items == 1
+
+
+def test_queue_status_update_creates_note_and_active_view_excludes_resolved(
+    tmp_path: Path,
+) -> None:
+    factory = loaded_repo(tmp_path, "workbench_status_update.db")
+    with factory.begin() as session:
+        repo = PredictionMarketRepository(session)
+        service = WorkbenchService(repo)
+        item = service.build_queue(
+            ASOF,
+            market_ids=[MARKET_ID],
+            queue_name="review_status_test",
+        )[0]
+        updated = service.update_queue_item_status(
+            item.queue_item_id,
+            WorkbenchQueueItemStatusUpdateRequest(
+                review_status=ReviewStatus.RESOLVED,
+                reviewed_by="operator",
+                review_outcome=ReviewOutcome.DATA_ISSUE_CONFIRMED,
+                review_reason="Known fixture data gap.",
+                note_text="Review update test note. No trading action.",
+                tags=["data-gap"],
+            ),
+        )
+        active = service.list_latest_queue_items(queue_name="review_status_test")
+        include_resolved = service.list_latest_queue_items(
+            queue_name="review_status_test",
+            include_resolved=True,
+        )
+        notes = service.list_notes(market_id=MARKET_ID)
+        status = service.get_status(queue_name="review_status_test")
+
+    assert updated.review_status == ReviewStatus.RESOLVED
+    assert updated.metadata["review_outcome"] == ReviewOutcome.DATA_ISSUE_CONFIRMED.value
+    assert updated.metadata["reviewed_by"] == "operator"
+    assert updated.metadata["linked_note_id"].startswith("desk_note_")
+    assert len(active) == 0
+    assert len(include_resolved) == 1
+    assert include_resolved[0].queue_item_id == item.queue_item_id
+    assert notes[0].queue_item_id == item.queue_item_id
+    assert status.latest_queue_item_count == 0
+    assert status.review_status_counts == {ReviewStatus.RESOLVED.value: 1}
+    assert status.public_read_schedule_status == "HELD"

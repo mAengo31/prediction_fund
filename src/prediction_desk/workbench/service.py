@@ -10,7 +10,12 @@ from prediction_desk.workbench.cards import (
     build_cross_venue_comparison_card,
     build_market_decision_card,
 )
-from prediction_desk.workbench.enums import ReviewPriorityBucket, ReviewStatus, WorkbenchRunStatus
+from prediction_desk.workbench.enums import (
+    DeskReviewNoteType,
+    ReviewPriorityBucket,
+    ReviewStatus,
+    WorkbenchRunStatus,
+)
 from prediction_desk.workbench.models import (
     CrossVenueComparisonCard,
     DeskReviewNote,
@@ -18,11 +23,13 @@ from prediction_desk.workbench.models import (
     DeskWatchlist,
     MarketDecisionCard,
     MarketReviewQueueItem,
+    WorkbenchQueueItemStatusUpdateRequest,
     WorkbenchQueueSummary,
     WorkbenchRun,
     WorkbenchRunConfig,
     WorkbenchRunResult,
     WorkbenchRunSummary,
+    WorkbenchStatusSummary,
     default_watchlists,
     workbench_object_id,
 )
@@ -134,6 +141,8 @@ class WorkbenchService:
         queue_name: str | None = None,
         priority_bucket: ReviewPriorityBucket | str | None = None,
         review_status: ReviewStatus | str | None = None,
+        include_resolved: bool = False,
+        include_dismissed: bool = False,
         asof_timestamp: datetime | None = None,
         limit: int = 500,
         offset: int = 0,
@@ -143,6 +152,8 @@ class WorkbenchService:
             queue_name=queue_name,
             priority_bucket=priority_bucket,
             review_status=review_status,
+            include_resolved=include_resolved,
+            include_dismissed=include_dismissed,
             asof_timestamp=asof_timestamp,
             limit=limit,
             offset=offset,
@@ -161,6 +172,8 @@ class WorkbenchService:
         items = self.list_latest_queue_items(
             queue_name=queue_name,
             asof_timestamp=run.asof_timestamp,
+            include_resolved=True,
+            include_dismissed=True,
             limit=10000,
         )
         return [item for item in items if item.market_id in run_market_ids][
@@ -174,6 +187,8 @@ class WorkbenchService:
         queue_name: str | None = None,
         priority_bucket: ReviewPriorityBucket | str | None = None,
         review_status: ReviewStatus | str | None = None,
+        include_resolved: bool = False,
+        include_dismissed: bool = False,
         asof_timestamp: datetime | None = None,
         limit: int = 500,
         offset: int = 0,
@@ -183,6 +198,8 @@ class WorkbenchService:
             queue_name=queue_name,
             priority_bucket=priority_bucket,
             review_status=review_status,
+            include_resolved=include_resolved,
+            include_dismissed=include_dismissed,
             asof_timestamp=asof_timestamp,
             limit=limit,
             offset=offset,
@@ -194,12 +211,16 @@ class WorkbenchService:
         queue_name: str | None = None,
         latest_only: bool = True,
         asof_timestamp: datetime | None = None,
+        include_resolved: bool = False,
+        include_dismissed: bool = False,
         limit: int = 500,
     ) -> WorkbenchQueueSummary:
         items = (
             self.list_latest_queue_items(
                 queue_name=queue_name,
                 asof_timestamp=asof_timestamp,
+                include_resolved=include_resolved,
+                include_dismissed=include_dismissed,
                 limit=limit,
             )
             if latest_only
@@ -238,6 +259,166 @@ class WorkbenchService:
                     for escalator in item.metadata.get("soft_escalators", [])
                 )
             ),
+            metadata={"workbench_version": "desk_workbench_v1"},
+        )
+
+    def update_queue_item_status(
+        self,
+        queue_item_id: str,
+        request: WorkbenchQueueItemStatusUpdateRequest,
+    ) -> MarketReviewQueueItem:
+        item = self.repo.get_market_review_queue_item(queue_item_id)
+        if item is None:
+            raise WorkbenchServiceError("queue_item_not_found")
+
+        reviewed_at = datetime.now(tz=UTC)
+        note_id: str | None = None
+        if request.note_text:
+            note = self.create_note(
+                DeskReviewNoteCreate(
+                    market_id=item.market_id,
+                    queue_item_id=item.queue_item_id,
+                    author=request.reviewed_by,
+                    note_type=DeskReviewNoteType.REVIEW_DECISION,
+                    text=request.note_text,
+                    tags=list(request.tags),
+                    metadata={
+                        "review_outcome": (
+                            request.review_outcome.value
+                            if request.review_outcome is not None
+                            else None
+                        ),
+                        "review_reason": request.review_reason,
+                        "source": "queue_status_update",
+                    },
+                )
+            )
+            note_id = note.note_id
+
+        review_entry = {
+            "review_status": request.review_status.value,
+            "reviewed_by": request.reviewed_by,
+            "reviewed_at": reviewed_at.isoformat(),
+            "review_outcome": (
+                request.review_outcome.value if request.review_outcome is not None else None
+            ),
+            "review_reason": request.review_reason,
+            "linked_note_id": note_id,
+        }
+        metadata = dict(item.metadata)
+        history = list(metadata.get("review_history", []))
+        history.append(review_entry)
+        metadata.update(review_entry)
+        metadata["review_history"] = history
+
+        updated = item.model_copy(
+            update={
+                "review_status": request.review_status,
+                "metadata": metadata,
+            }
+        )
+        return self.repo.update_market_review_queue_item(updated)
+
+    def get_status(
+        self,
+        *,
+        queue_name: str | None = None,
+        asof_timestamp: datetime | None = None,
+        limit: int = 1000,
+    ) -> WorkbenchStatusSummary:
+        all_latest_items = self.list_latest_queue_items(
+            queue_name=queue_name,
+            include_resolved=True,
+            include_dismissed=True,
+            asof_timestamp=asof_timestamp,
+            limit=limit,
+        )
+        active_items = [
+            item
+            for item in all_latest_items
+            if item.review_status
+            not in {ReviewStatus.RESOLVED, ReviewStatus.DISMISSED}
+        ]
+        coverage_reports = self.repo.list_data_coverage_reports(limit=1)
+        latest_coverage = coverage_reports[0] if coverage_reports else None
+        latest_gaps = (
+            self.repo.list_data_gaps(
+                coverage_report_id=latest_coverage.coverage_report_id,
+                limit=1000,
+            )
+            if latest_coverage is not None
+            else []
+        )
+        if not latest_gaps:
+            recent_gaps = self.repo.list_data_gaps(limit=1000)
+            latest_gap_end_time = recent_gaps[0].end_time if recent_gaps else None
+            latest_gaps = [
+                gap for gap in recent_gaps if gap.end_time == latest_gap_end_time
+            ]
+        latest_public_read_run = next(
+            (
+                run
+                for run in self.repo.list_collection_runs(limit=100)
+                if _value(run.mode) == "MANUAL_PUBLIC_FETCH"
+            ),
+            None,
+        )
+        latest_run = next(iter(self.repo.list_workbench_runs(limit=1)), None)
+        return WorkbenchStatusSummary(
+            generated_at=datetime.now(tz=UTC),
+            queue_name=queue_name,
+            latest_queue_item_count=len(active_items),
+            priority_bucket_counts=dict(
+                Counter(item.priority_bucket.value for item in active_items)
+            ),
+            review_status_counts=dict(
+                Counter(item.review_status.value for item in all_latest_items)
+            ),
+            top_reason_codes=dict(
+                Counter(
+                    reason for item in active_items for reason in item.reason_codes
+                ).most_common(20)
+            ),
+            top_hard_escalators=dict(
+                Counter(
+                    escalator
+                    for item in active_items
+                    for escalator in item.metadata.get("hard_escalators", [])
+                ).most_common(20)
+            ),
+            top_soft_escalators=dict(
+                Counter(
+                    escalator
+                    for item in active_items
+                    for escalator in item.metadata.get("soft_escalators", [])
+                ).most_common(20)
+            ),
+            unresolved_critical_count=sum(
+                1
+                for item in active_items
+                if item.priority_bucket == ReviewPriorityBucket.CRITICAL
+            ),
+            unresolved_high_count=sum(
+                1
+                for item in active_items
+                if item.priority_bucket == ReviewPriorityBucket.HIGH
+            ),
+            latest_workbench_run_id=latest_run.workbench_run_id if latest_run else None,
+            latest_coverage_score=(
+                latest_coverage.coverage_score if latest_coverage is not None else None
+            ),
+            latest_gap_counts=dict(Counter(_value(gap.gap_type) for gap in latest_gaps)),
+            latest_public_read_collection_run_status=(
+                _value(latest_public_read_run.status)
+                if latest_public_read_run is not None
+                else None
+            ),
+            latest_public_read_collection_run_id=(
+                latest_public_read_run.collection_run_id
+                if latest_public_read_run is not None
+                else None
+            ),
+            public_read_schedule_status="HELD",
             metadata={"workbench_version": "desk_workbench_v1"},
         )
 
@@ -463,3 +644,7 @@ def _queue_review_action(item: MarketReviewQueueItem) -> str:
     if isinstance(action, str) and action:
         return action
     return recommended_action(item.reason_codes).value
+
+
+def _value(value: object) -> str:
+    return str(getattr(value, "value", value))

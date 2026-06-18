@@ -206,6 +206,18 @@ The desk cycle may create integrity, equivalence, divergence, pretrade, simulate
 research, workbench, and desk-note artifacts from stored staging data. It does not call
 public-read collection and does not enable trading.
 
+Read the daily active workbench status without running analysis:
+
+```bash
+API_BASE_URL="https://your-staging-api.example.com" \
+PREDICTION_DESK_API_TOKEN="..." \
+scripts/staging_workbench_status.sh
+```
+
+Queue review status updates are review metadata only. They can mark items `IN_REVIEW`,
+`WATCHING`, `RESOLVED`, or `DISMISSED` and optionally create a linked desk note. They do
+not mutate market data, place orders, or enable execution.
+
 Run the tiny public-read pilot only after explicit approval:
 
 ```bash
@@ -234,6 +246,23 @@ If a scheduled validation job is enabled later, use fixture mode only:
 ```bash
 prediction-desk dataops-cycle --mode FIXTURE
 ```
+
+Create or update the Azure fixture-only schedule only after explicit confirmation:
+
+```bash
+CONFIRM_ENABLE_FIXTURE_SCHEDULE=true \
+DATABASE_URL="postgresql+psycopg://..." \
+scripts/azure_enable_fixture_schedule.sh
+```
+
+Disable it with:
+
+```bash
+CONFIRM_DISABLE_FIXTURE_SCHEDULE=true scripts/azure_disable_fixture_schedule.sh
+```
+
+The helper does not schedule public-read collection, does not pass `--allow-network`, and
+does not require venue credentials.
 
 Do not schedule public-read collection during this staging phase.
 

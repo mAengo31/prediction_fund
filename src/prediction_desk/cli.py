@@ -74,12 +74,14 @@ from prediction_desk.scenario.service import ScenarioService, ScenarioServiceErr
 from prediction_desk.scoring.trust_verdict import build_trust_verdict
 from prediction_desk.workbench.enums import (
     DeskReviewNoteType,
+    ReviewOutcome,
     ReviewPriorityBucket,
     ReviewStatus,
 )
 from prediction_desk.workbench.models import (
     DeskReviewNoteCreate,
     MarketReviewQueueItem,
+    WorkbenchQueueItemStatusUpdateRequest,
     WorkbenchRunConfig,
 )
 from prediction_desk.workbench.runner import WorkbenchRunError, run_workbench_build
@@ -3660,6 +3662,14 @@ def workbench_queue_command(
         ReviewStatus | None,
         typer.Option("--review-status", help="Filter by review status."),
     ] = None,
+    include_resolved: Annotated[
+        bool,
+        typer.Option("--include-resolved", help="Include RESOLVED items in latest view."),
+    ] = False,
+    include_dismissed: Annotated[
+        bool,
+        typer.Option("--include-dismissed", help="Include DISMISSED items in latest view."),
+    ] = False,
     limit: Annotated[int, typer.Option("--limit", help="Maximum items.")] = 50,
     database_url: Annotated[
         str | None, typer.Option("--database-url", help="Database URL to read.")
@@ -3677,6 +3687,8 @@ def workbench_queue_command(
                 queue_name=queue_name,
                 priority_bucket=priority_bucket,
                 review_status=review_status,
+                include_resolved=include_resolved,
+                include_dismissed=include_dismissed,
                 limit=limit,
             )
             if latest
@@ -3703,6 +3715,14 @@ def workbench_queue_summary_command(
             help="Summarize latest item per market or historical queue rows.",
         ),
     ] = True,
+    include_resolved: Annotated[
+        bool,
+        typer.Option("--include-resolved", help="Include RESOLVED latest items."),
+    ] = False,
+    include_dismissed: Annotated[
+        bool,
+        typer.Option("--include-dismissed", help="Include DISMISSED latest items."),
+    ] = False,
     limit: Annotated[int, typer.Option("--limit", help="Maximum rows to summarize.")] = 500,
     database_url: Annotated[
         str | None, typer.Option("--database-url", help="Database URL to read.")
@@ -3716,6 +3736,8 @@ def workbench_queue_summary_command(
         summary = WorkbenchService(PredictionMarketRepository(session)).summarize_queue(
             queue_name=queue_name,
             latest_only=latest_only,
+            include_resolved=include_resolved,
+            include_dismissed=include_dismissed,
             limit=limit,
         )
     rows = [
@@ -3725,6 +3747,46 @@ def workbench_queue_summary_command(
         ("top_reason_codes", summary.top_reason_codes),
         ("hard_escalator_counts", summary.hard_escalator_counts),
         ("soft_escalator_counts", summary.soft_escalator_counts),
+    ]
+    _print_table(headers=("metric", "value"), rows=rows)
+
+
+@app.command("workbench-status")
+def workbench_status_command(
+    queue_name: Annotated[
+        str | None, typer.Option("--queue-name", help="Review queue name.")
+    ] = None,
+    limit: Annotated[int, typer.Option("--limit", help="Maximum latest queue rows.")] = 1000,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read.")
+    ] = None,
+) -> None:
+    """Prints the daily workbench status summary."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory() as session:
+        status = WorkbenchService(PredictionMarketRepository(session)).get_status(
+            queue_name=queue_name,
+            limit=limit,
+        )
+    rows = [
+        ("latest_queue_item_count", status.latest_queue_item_count),
+        ("priority_bucket_counts", status.priority_bucket_counts),
+        ("review_status_counts", status.review_status_counts),
+        ("top_reason_codes", status.top_reason_codes),
+        ("top_hard_escalators", status.top_hard_escalators),
+        ("top_soft_escalators", status.top_soft_escalators),
+        ("unresolved_critical_count", status.unresolved_critical_count),
+        ("unresolved_high_count", status.unresolved_high_count),
+        ("latest_workbench_run_id", status.latest_workbench_run_id or ""),
+        ("latest_coverage_score", status.latest_coverage_score or ""),
+        ("latest_gap_counts", status.latest_gap_counts),
+        (
+            "latest_public_read_collection_run_status",
+            status.latest_public_read_collection_run_status or "",
+        ),
+        ("public_read_schedule_status", status.public_read_schedule_status),
     ]
     _print_table(headers=("metric", "value"), rows=rows)
 
@@ -3916,15 +3978,87 @@ def workbench_add_note_command(
     )
 
 
+@app.command("workbench-update-item-status")
+def workbench_update_item_status_command(
+    queue_item_id: Annotated[
+        str, typer.Option("--queue-item-id", help="Queue item ID.")
+    ],
+    review_status: Annotated[
+        ReviewStatus, typer.Option("--review-status", help="New review status.")
+    ],
+    reviewed_by: Annotated[
+        str | None, typer.Option("--reviewed-by", help="Reviewer label.")
+    ] = None,
+    review_outcome: Annotated[
+        ReviewOutcome | None,
+        typer.Option("--review-outcome", help="Review outcome taxonomy value."),
+    ] = None,
+    review_reason: Annotated[
+        str | None, typer.Option("--review-reason", help="Review reason.")
+    ] = None,
+    note_text: Annotated[
+        str | None, typer.Option("--note-text", help="Optional linked note text.")
+    ] = None,
+    tag: Annotated[
+        list[str] | None,
+        typer.Option("--tag", help="Linked note tag; repeatable."),
+    ] = None,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to write.")
+    ] = None,
+) -> None:
+    """Updates a queue item's human review status."""
+
+    request = WorkbenchQueueItemStatusUpdateRequest(
+        review_status=review_status,
+        reviewed_by=reviewed_by,
+        review_outcome=review_outcome,
+        review_reason=review_reason,
+        note_text=note_text,
+        tags=list(tag or []),
+    )
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            item = WorkbenchService(PredictionMarketRepository(session)).update_queue_item_status(
+                queue_item_id,
+                request,
+            )
+        except WorkbenchServiceError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+    _print_table(
+        headers=(
+            "queue_item_id",
+            "market_id",
+            "review_status",
+            "review_outcome",
+            "linked_note_id",
+        ),
+        rows=[
+            (
+                item.queue_item_id,
+                item.market_id,
+                item.review_status.value,
+                item.metadata.get("review_outcome") or "",
+                item.metadata.get("linked_note_id") or "",
+            )
+        ],
+    )
+
+
 def _print_workbench_queue(items: Sequence[MarketReviewQueueItem]) -> None:
     rows = []
     for item in items:
         metadata = item.metadata
         rows.append(
             (
+                item.queue_item_id,
                 item.market_id,
                 item.priority_score,
                 item.priority_bucket.value,
+                item.review_status.value,
                 metadata.get("recommended_next_review_action", ""),
                 item.primary_reason_code,
                 ",".join(metadata.get("hard_escalators", [])),
@@ -3934,9 +4068,11 @@ def _print_workbench_queue(items: Sequence[MarketReviewQueueItem]) -> None:
         )
     _print_table(
         headers=(
+            "queue_item_id",
             "market_id",
             "priority",
             "bucket",
+            "status",
             "review_action",
             "primary_reason",
             "hard_escalators",

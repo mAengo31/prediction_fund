@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -58,6 +59,38 @@ def test_cli_workbench_queue_card_and_notes_work(tmp_path: Path) -> None:
             database_url,
         ],
     )
+    status = runner.invoke(
+        app,
+        [
+            "workbench-status",
+            "--database-url",
+            database_url,
+        ],
+    )
+    queue_item_match = re.search(r"queue_item_[0-9a-f]+", latest_queue.output)
+    assert queue_item_match is not None
+    status_update = runner.invoke(
+        app,
+        [
+            "workbench-update-item-status",
+            "--database-url",
+            database_url,
+            "--queue-item-id",
+            queue_item_match.group(0),
+            "--review-status",
+            "WATCHING",
+            "--reviewed-by",
+            "cli-test",
+            "--review-outcome",
+            "NEEDS_MORE_DATA",
+            "--review-reason",
+            "CLI review status update.",
+            "--note-text",
+            "CLI linked review note. No trading action.",
+            "--tag",
+            "cli",
+        ],
+    )
     note = runner.invoke(
         app,
         [
@@ -93,6 +126,11 @@ def test_cli_workbench_queue_card_and_notes_work(tmp_path: Path) -> None:
     assert "review_action" in latest_queue.output
     assert queue_summary.exit_code == 0
     assert "priority_bucket_counts" in queue_summary.output
+    assert status.exit_code == 0
+    assert "public_read_schedule_status" in status.output
+    assert status_update.exit_code == 0
+    assert "WATCHING" in status_update.output
+    assert "NEEDS_MORE_DATA" in status_update.output
     assert card.exit_code == 0
     assert "review_action" in card.output
     assert note.exit_code == 0

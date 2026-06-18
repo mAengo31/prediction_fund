@@ -168,10 +168,17 @@ Build desk review queues and decision cards:
 prediction-desk workbench-build-queue --market-id mkt_cpi_yoy_at_least_3pct_2026_09
 prediction-desk workbench-queue --latest
 prediction-desk workbench-queue-summary
+prediction-desk workbench-status
 prediction-desk workbench-card --market-id mkt_cpi_yoy_at_least_3pct_2026_09
 prediction-desk workbench-add-note \
   --market-id mkt_cpi_yoy_at_least_3pct_2026_09 \
   --text "Reviewed latest data quality and pre-trade context."
+prediction-desk workbench-update-item-status \
+  --queue-item-id queue_item_... \
+  --review-status WATCHING \
+  --reviewed-by operator \
+  --review-outcome NEEDS_MORE_DATA \
+  --review-reason "Keep in daily review until the next fixture cycle."
 ```
 
 Analyze fast-lane integrity signals:

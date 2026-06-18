@@ -3353,6 +3353,12 @@ class PredictionMarketRepository:
         self.session.flush()
         return item
 
+    def update_market_review_queue_item(
+        self,
+        item: MarketReviewQueueItem,
+    ) -> MarketReviewQueueItem:
+        return self.save_market_review_queue_item(item)
+
     def get_market_review_queue_item(
         self,
         queue_item_id: str,
@@ -3404,6 +3410,8 @@ class PredictionMarketRepository:
         queue_name: str | None = None,
         priority_bucket: ReviewPriorityBucket | str | None = None,
         review_status: ReviewStatus | str | None = None,
+        include_resolved: bool = False,
+        include_dismissed: bool = False,
         asof_timestamp: datetime | None = None,
         limit: int = 500,
         offset: int = 0,
@@ -3433,6 +3441,17 @@ class PredictionMarketRepository:
         if review_status is not None:
             status_value = _enum_value(review_status)
             items = [item for item in items if item.review_status.value == status_value]
+        elif not (include_resolved and include_dismissed):
+            excluded_statuses: set[str] = set()
+            if not include_resolved:
+                excluded_statuses.add(ReviewStatus.RESOLVED.value)
+            if not include_dismissed:
+                excluded_statuses.add(ReviewStatus.DISMISSED.value)
+            items = [
+                item
+                for item in items
+                if item.review_status.value not in excluded_statuses
+            ]
         items = sorted(
             items,
             key=lambda item: (

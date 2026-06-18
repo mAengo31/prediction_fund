@@ -97,6 +97,68 @@ Historical queue rows are also append-only. Use `GET /workbench/queues/latest` o
 `prediction-desk workbench-queue --latest` for the active desk queue. Use
 `GET /workbench/queues/items` for historical/audit readback.
 
+The active queue excludes `RESOLVED` and `DISMISSED` items by default. Include them for
+audit or review follow-up with `include_resolved=true` / `include_dismissed=true` on the
+API, or `--include-resolved` / `--include-dismissed` in the CLI.
+
+## Daily Review Workflow
+
+Operators should work from the latest active queue, inspect the score diagnostics, and
+mark each item with a review status:
+
+- `NEW`
+- `IN_REVIEW`
+- `RESOLVED`
+- `DISMISSED`
+- `WATCHING`
+
+Status updates are review metadata only. They do not mutate market data, pre-trade state,
+paper simulation, venue state, or any execution surface.
+
+Review outcomes are:
+
+- `DATA_ISSUE_CONFIRMED`
+- `FALSE_POSITIVE`
+- `NEEDS_MORE_DATA`
+- `STRATEGY_CANDIDATE`
+- `CONTRACT_RISK_CONFIRMED`
+- `DIVERGENCE_REVIEWED`
+- `PRETRADE_BLOCK_CONFIRMED`
+- `WATCHLIST_ONLY`
+- `DISMISSED_NO_ACTION`
+- `OTHER`
+
+Example API update:
+
+```json
+{
+  "review_status": "RESOLVED",
+  "reviewed_by": "operator",
+  "review_outcome": "DATA_ISSUE_CONFIRMED",
+  "review_reason": "Known public detail rule fields are empty.",
+  "note_text": "Reviewed as staging data gap. No trading action.",
+  "tags": ["data-gap", "staging"]
+}
+```
+
+Example CLI update:
+
+```bash
+prediction-desk workbench-update-item-status \
+  --queue-item-id queue_item_... \
+  --review-status RESOLVED \
+  --reviewed-by operator \
+  --review-outcome DATA_ISSUE_CONFIRMED \
+  --review-reason "Known public detail rule fields are empty." \
+  --note-text "Reviewed as staging data gap. No trading action." \
+  --tag data-gap
+```
+
+Use `GET /workbench/status`, `prediction-desk workbench-status`, or
+`scripts/staging_workbench_status.sh` for the daily summary: active queue counts, review
+status counts, top reasons, hard/soft escalators, latest coverage/gaps, and the explicit
+`public_read_schedule_status` value. Public-read scheduling remains `HELD`.
+
 ## Decision Cards
 
 Decision cards are compact, evidence-backed snapshots. They include source reference IDs
@@ -128,6 +190,8 @@ Workbench endpoints are under `/api/v1/workbench` and use the existing bearer-to
 - `GET /workbench/queues/items`
 - `GET /workbench/queues/latest`
 - `GET /workbench/queues/summary`
+- `POST /workbench/queues/items/{queue_item_id}/status`
+- `GET /workbench/status`
 - `POST /workbench/markets/{market_id}/decision-card`
 - `GET /workbench/markets/{market_id}/decision-card/latest`
 - `POST /workbench/equivalence/{equivalence_assessment_id}/comparison-card`
@@ -143,6 +207,7 @@ prediction-desk workbench-build-queue --market-id mkt_cpi_yoy_at_least_3pct_2026
 prediction-desk workbench-queue --limit 25
 prediction-desk workbench-queue --latest --queue-name default_review_queue
 prediction-desk workbench-queue-summary --queue-name default_review_queue
+prediction-desk workbench-status --queue-name default_review_queue
 prediction-desk workbench-card --market-id mkt_cpi_yoy_at_least_3pct_2026_09
 prediction-desk workbench-run --market-id mkt_cpi_yoy_at_least_3pct_2026_09
 prediction-desk workbench-add-note \

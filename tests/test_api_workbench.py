@@ -23,6 +23,23 @@ def test_api_workbench_queue_card_and_notes_work(
     )
     latest_queue = client.get("/api/v1/workbench/queues/latest")
     queue_summary = client.get("/api/v1/workbench/queues/summary")
+    status_update = client.post(
+        f"/api/v1/workbench/queues/items/{queue.json()[0]['queue_item_id']}/status",
+        json={
+            "review_status": "WATCHING",
+            "reviewed_by": "api-test",
+            "review_outcome": "NEEDS_MORE_DATA",
+            "review_reason": "API status update test.",
+            "note_text": "API linked review note. No trading action.",
+            "tags": ["api", "review"],
+        },
+    )
+    active_latest = client.get("/api/v1/workbench/queues/latest")
+    include_watching = client.get(
+        "/api/v1/workbench/queues/latest",
+        params={"review_status": "WATCHING"},
+    )
+    status_summary = client.get("/api/v1/workbench/status")
     card = client.post(
         f"/api/v1/workbench/markets/{MARKET_ID}/decision-card",
         json={"asof_timestamp": "2026-06-16T12:00:00Z"},
@@ -47,6 +64,15 @@ def test_api_workbench_queue_card_and_notes_work(
     assert latest_queue.json()[0]["market_id"] == MARKET_ID
     assert queue_summary.status_code == 200
     assert queue_summary.json()["total_items"] == 1
+    assert status_update.status_code == 200
+    assert status_update.json()["review_status"] == "WATCHING"
+    assert status_update.json()["metadata"]["review_outcome"] == "NEEDS_MORE_DATA"
+    assert active_latest.status_code == 200
+    assert active_latest.json()[0]["review_status"] == "WATCHING"
+    assert include_watching.status_code == 200
+    assert include_watching.json()[0]["queue_item_id"] == queue.json()[0]["queue_item_id"]
+    assert status_summary.status_code == 200
+    assert status_summary.json()["public_read_schedule_status"] == "HELD"
     assert card.status_code == 200
     assert card.json()["market_id"] == MARKET_ID
     assert latest.status_code == 200
