@@ -348,6 +348,9 @@ def test_polymarket_manual_public_price_history_resolves_token_id(
             repo=repo,
         )
         prices = repo.list_price_snapshots("polymarket_market_0xabc123nyctemp")
+        mapping = repo.get_mapping_by_canonical_market_id(
+            "polymarket_market_0xabc123nyctemp"
+        )
 
     assert result.run.status.value == "COMPLETED"
     assert result.run.payloads_archived == 1
@@ -356,6 +359,9 @@ def test_polymarket_manual_public_price_history_resolves_token_id(
         ("price_history", "1111111111111111111111111111111111111111111111111111111111111111")
     ]
     assert prices[0].external_outcome_id.startswith("111111")
+    assert mapping is not None
+    assert mapping.metadata["gamma_market_id"] == "pm-nyc-temp-20260704"
+    assert mapping.metadata["source"] == "polymarket_price_history"
 
 
 def test_polymarket_manual_public_max_payloads_enforced_across_tokens(

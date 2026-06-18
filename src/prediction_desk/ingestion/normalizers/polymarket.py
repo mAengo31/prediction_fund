@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -670,7 +670,11 @@ def _first_present(source: dict[str, Any], *keys: str) -> object:
 def _parse_datetime(value: object) -> datetime | None:
     if value is None:
         return None
+    if isinstance(value, int | float):
+        return datetime.fromtimestamp(value, tz=UTC)
     text = str(value).strip()
     if not text:
         return None
+    if text.isdigit():
+        return datetime.fromtimestamp(int(text), tz=UTC)
     return datetime.fromisoformat(text.replace("Z", "+00:00"))

@@ -113,6 +113,30 @@ def test_polymarket_price_history_fixture_maps_into_price_snapshot() -> None:
     assert snapshot.available_at.isoformat() == "2026-06-16T12:10:00+00:00"
 
 
+def test_polymarket_price_history_accepts_unix_second_timestamps() -> None:
+    payload = _payload("price_history_weather.json")
+    token_id = "1111111111111111111111111111111111111111111111111111111111111111"
+    timestamp_payload = payload.model_copy(
+        update={
+            "response_payload": {
+                "history": [
+                    {
+                        "t": 1781686819,
+                        "available_at": "2026-06-16T12:10:00Z",
+                        "p": "0.63",
+                        "token_id": token_id,
+                    }
+                ]
+            }
+        }
+    )
+
+    [normalized] = normalize_polymarket_payload(timestamp_payload)
+
+    assert normalized.price_snapshots
+    assert normalized.price_snapshots[0].observed_at.isoformat() == "2026-06-17T09:00:19+00:00"
+
+
 def _payload(name: str):
     fixture_dir = Path("sample_data/venue_payloads/polymarket")
     payloads = load_fixture_payloads(

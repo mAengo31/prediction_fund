@@ -788,7 +788,9 @@ class PredictionMarketRepository:
             existing.external_url = mapping.external_url or existing.external_url
             existing.last_seen_at = mapping.last_seen_at
             existing.status = mapping.status.value
-            existing.metadata_json = _metadata(mapping.metadata)
+            existing.metadata_json = _metadata(
+                {**(existing.metadata_json or {}), **mapping.metadata}
+            )
             self.session.flush()
             return _venue_market_mapping_from_record(existing)
         self.session.merge(_venue_market_mapping_to_record(mapping))
