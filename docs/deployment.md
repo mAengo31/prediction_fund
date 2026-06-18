@@ -181,6 +181,17 @@ PREDICTION_DESK_API_TOKEN="..." \
 scripts/azure_staging_smoke.sh
 ```
 
+Run the desk workbench staging smoke after migrations:
+
+```bash
+API_BASE_URL="https://your-staging-api.example.com" \
+PREDICTION_DESK_API_TOKEN="..." \
+scripts/staging_workbench_smoke.sh
+```
+
+The workbench smoke builds review artifacts only. It does not call public-read endpoints
+or add execution authority.
+
 Run the tiny public-read pilot only after explicit approval:
 
 ```bash

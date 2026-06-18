@@ -61,6 +61,11 @@ Queue priority is deterministic. Examples:
 
 The queue does not recommend live trades.
 
+Data gaps are append-only audit rows. Queue and card scoring use gaps from the latest
+relevant coverage report as of the workbench timestamp, rather than all historical gap
+rows. This prevents an old missing-data gap from keeping a market at high review priority
+after a newer coverage report has closed that gap.
+
 ## Decision Cards
 
 Decision cards are compact, evidence-backed snapshots. They include source reference IDs
@@ -111,6 +116,24 @@ prediction-desk workbench-add-note \
 prediction-desk workbench-notes --market-id mkt_cpi_yoy_at_least_3pct_2026_09
 ```
 
+## Staging Smoke
+
+After deploying to Azure staging and running migrations, validate the workbench API without
+printing secrets:
+
+```bash
+API_BASE_URL="https://prediction-desk-staging-api.bluebush-22f9863f.centralus.azurecontainerapps.io" \
+PREDICTION_DESK_API_TOKEN="<secret>" \
+scripts/staging_workbench_smoke.sh
+```
+
+The script uses one existing staging market, builds a workbench run and review queue,
+creates and reads a decision card, and writes a safe observation note:
+
+`Staging validation note: workbench smoke completed. No trading action.`
+
+It does not call public venue endpoints and does not perform execution.
+
 ## Prohibited
 
 The workbench does not add:
@@ -129,4 +152,3 @@ The workbench does not add:
 
 Future UI work can build on these API and CLI surfaces without changing the execution
 boundary.
-

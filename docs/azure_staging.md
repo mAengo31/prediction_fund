@@ -15,8 +15,10 @@ The first Azure staging deployment is active in:
 - PostgreSQL Flexible Server: `prediction-desk-staging-pg-cus-3bbbab`
 - ACR: `predictiondesk3bbbab44cusacr`
 
-Alembic migrations have passed through revision `20260618_0014`, and fixture staging smoke
-has passed. Tiny manual public-read pilots have been run against Kalshi and Polymarket.
+Alembic migrations have passed through revision `20260618_0015`, and fixture staging smoke
+has passed. Desk Decision Workbench v1 is deployed on Container App revision
+`prediction-desk-staging-api--0000009` with image tag `9bf1e04`. Tiny manual public-read
+pilots have been run against Kalshi and Polymarket.
 Failed partial resource groups from restricted-region attempts, `prediction-desk-staging-rg`
 and `prediction-desk-staging-wus2-rg`, were deleted after explicit operator approval.
 
@@ -290,11 +292,27 @@ The helper hides `DATABASE_URL`, runs Alembic, and prints read-only table counts
 export API_BASE_URL="https://<container-app-fqdn>"
 export PREDICTION_DESK_API_TOKEN="<secret>"
 scripts/azure_staging_smoke.sh
+scripts/staging_workbench_smoke.sh
 ```
 
 This wraps `scripts/staging_smoke.sh` and validates health, readiness, market readback,
 DataOps defaults, fixture collection, coverage, and gaps. It does not call public venue
-endpoints.
+endpoints. `scripts/staging_workbench_smoke.sh` separately validates workbench runs,
+queue builds, queue readback, decision-card build/readback, and desk-note create/list
+without printing the API token.
+
+Latest workbench staging validation:
+
+- Fixture smoke: `coverage_score=89`, `detected_gaps=14`, public-read not called.
+- Workbench smoke: built one run, one queue item, one decision card, and one observation
+  note.
+- Full first review queue: 9 items, with 5 `LOW` and 4 `INFO` after the workbench was
+  fixed to use the latest coverage gap batch instead of cumulative historical gaps.
+- Top current review reasons: low/medium data quality and no-review-signal context.
+- Current DB counts include 22 queue items, 31 decision cards, 2 desk notes, 4 workbench
+  runs, and 4 workbench run summaries.
+
+Public-read scheduling remains held.
 
 ## DB Inspection
 
