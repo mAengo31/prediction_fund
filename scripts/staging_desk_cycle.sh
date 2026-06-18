@@ -287,6 +287,9 @@ def main() -> int:
                     "priority_score": item["priority_score"],
                     "priority_bucket": item["priority_bucket"],
                     "primary_reason_code": item["primary_reason_code"],
+                    "review_action": (item.get("metadata") or {}).get(
+                        "recommended_next_review_action"
+                    ),
                     "reason_codes": item.get("reason_codes", [])[:8],
                 },
                 sort_keys=True,
