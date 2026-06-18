@@ -16,7 +16,7 @@ The first Azure staging deployment is active in:
 - ACR: `predictiondesk3bbbab44cusacr`
 
 Alembic migrations have passed through revision `20260617_0013`, and fixture staging smoke
-has passed. A first tiny manual public-read pilot has been run against Kalshi only. Failed
+has passed. Tiny manual public-read pilots have been run against Kalshi only. Failed
 partial resource groups from restricted-region attempts, `prediction-desk-staging-rg` and
 `prediction-desk-staging-wus2-rg`, were deleted after explicit operator approval.
 
@@ -77,6 +77,38 @@ scripts/staging_public_read_pilot.sh
 Do not schedule public-read collection yet. Run targeted follow-up manually only after
 fixture smoke passes, budget alerts are active, backup posture is verified, and the exact
 market subset has been reviewed.
+
+## Targeted Public-Read Pilot
+
+The first targeted manual follow-up pilot used Kalshi `MARKET_DETAIL` and `ORDERBOOK` for
+two discovered canonical market IDs with `MAX_PAYLOADS=5`.
+
+Result:
+
+- Status: `COMPLETED`
+- Venue: `kalshi`
+- Endpoint types: `MARKET_DETAIL`, `ORDERBOOK`
+- Payloads archived: 4
+- Markets processed: 2
+- Errors: 0
+- New orderbook snapshots: 2
+- New price snapshots: 2
+- New liquidity snapshots: 2
+- Coverage score moved from `50` to `65`
+
+The two targeted markets no longer show missing orderbook, price, or liquidity gaps. The
+archived `MARKET_DETAIL` payloads for this run contained `rules_primary` and
+`rules_secondary` keys, but both fields were empty; they also did not contain a
+description, resolution source, settlement source, or settlement authority field. The
+remaining rule snapshot gaps are therefore valid and should not be closed by fabricating
+rule text from titles or subtitles. The remaining missing orderbook/price/liquidity gaps
+are for untargeted Kalshi catalog markets. This remains a manual validation path only;
+public-read scheduling is still held.
+
+Data gaps are append-only operational evidence. A targeted run may improve the latest
+coverage report while also adding new `data_gaps` rows from the latest detection pass.
+Use the latest `DataCoverageReport` for current coverage state and use cumulative
+`DataGap` counts as audit history.
 
 ## Architecture
 

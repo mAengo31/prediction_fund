@@ -62,9 +62,9 @@ Current Azure staging uses:
 - Region: `centralus`
 - API: `https://prediction-desk-staging-api.bluebush-22f9863f.centralus.azurecontainerapps.io`
 
-Fixture smoke has passed against this endpoint. Public-read pilot remains held until an
-Azure budget alert is configured or the operator explicitly accepts the cost risk, backup
-posture is confirmed, and `CONFIRM_PUBLIC_READ_ONLY=true` is set.
+Fixture smoke has passed against this endpoint. Manual public-read pilots require an
+Azure budget alert, confirmed backup posture, and `CONFIRM_PUBLIC_READ_ONLY=true`.
+Scheduled public-read collection remains held.
 
 ## Fixture Staging Smoke
 
@@ -116,6 +116,15 @@ The targeted shape still calls only the existing DataOps collection endpoint. It
 schedule collection and does not pass venue credentials. Keep `MAX_PAYLOADS` tiny while
 validating coverage/gap changes.
 
+The first targeted Kalshi follow-up used `MARKET_DETAIL,ORDERBOOK` for two discovered
+canonical markets. It completed with 4 archived payloads, 2 markets processed, 0 errors,
+and coverage improving from `50` to `65`. It created 2 orderbook snapshots, 2 price
+snapshots, and 2 liquidity snapshots. The archived `MARKET_DETAIL` payloads had
+`rules_primary` and `rules_secondary` keys, but both fields were empty and no
+description/resolution/settlement text was present. Missing rule snapshot gaps therefore
+remain valid for those two markets. Do not create rule snapshots from title/subtitle text
+alone. Public-read scheduling remains held.
+
 If public fetch is unsupported or unavailable, keep fixture staging as the validated path
 and record the failure mode in validation notes.
 
@@ -159,7 +168,10 @@ prediction-desk dataops-gaps
 ```
 
 Coverage and gaps are measurement artifacts. They do not create execution authority or
-strategy recommendations.
+strategy recommendations. Gap rows are append-only audit records; cumulative gap counts
+may increase even when the latest coverage score improves. Use the latest coverage report
+to assess current coverage and use gap history to understand what each detection pass
+observed.
 
 ## Rollback
 

@@ -36,7 +36,9 @@ missing objects, and a deterministic coverage score.
 
 `DataGap` records missing or stale data such as `MISSING_RULE_SNAPSHOT`,
 `MISSING_PRICE_SNAPSHOT`, `MISSING_LIQUIDITY_SNAPSHOT`, `STALE_MARKET_DATA`, and
-`UNSUPPORTED_HISTORICAL_ENDPOINT`.
+`UNSUPPORTED_HISTORICAL_ENDPOINT`. Gap rows are append-only audit records in v1. A later
+collection run can improve the latest coverage report while still adding new gap rows
+from a fresh detection pass.
 
 `DataRetentionPolicy` is reporting-only in v1. No deletion or compaction is performed.
 
@@ -153,3 +155,8 @@ count inspection, coverage/gap readback, and rollback.
 Coverage and gap reports help strategy research and simulated paper runs understand data
 availability. They do not change pre-trade or paper execution behavior directly in v1.
 They also do not create live venue access or execution authority.
+
+Interpret current coverage from the latest `DataCoverageReport`. Interpret cumulative
+`DataGap` row counts as history of detection passes, not as the current number of open
+gaps. For public-read pilots, do not close missing-rule gaps unless the archived public
+payload contains usable rule, resolution, or settlement text.
