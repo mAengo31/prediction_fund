@@ -125,6 +125,14 @@ description/resolution/settlement text was present. Missing rule snapshot gaps t
 remain valid for those two markets. Do not create rule snapshots from title/subtitle text
 alone. Public-read scheduling remains held.
 
+A final one-market targeted follow-up covered the remaining Kalshi market with missing
+orderbook, price, and liquidity data. It completed with 2 archived payloads, 1 market
+processed, 0 errors, and coverage improving from `80` to `88`. Non-rule market-data
+coverage is now complete for the current eight-market staging set: orderbooks `8 / 8`,
+prices `8 / 8`, and liquidity `8 / 8`. Rule snapshot coverage remains `3 / 8`; the final
+detail payload again exposed empty rule fields, so the rule gaps remain valid. Treat this
+as a successful manual validation result, not approval to schedule public-read collection.
+
 If public fetch is unsupported or unavailable, keep fixture staging as the validated path
 and record the failure mode in validation notes.
 

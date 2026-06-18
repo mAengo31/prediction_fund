@@ -78,7 +78,7 @@ Do not schedule public-read collection yet. Run targeted follow-up manually only
 fixture smoke passes, budget alerts are active, backup posture is verified, and the exact
 market subset has been reviewed.
 
-## Targeted Public-Read Pilot
+## Targeted Public-Read Pilots
 
 The first targeted manual follow-up pilot used Kalshi `MARKET_DETAIL` and `ORDERBOOK` for
 two discovered canonical market IDs with `MAX_PAYLOADS=5`.
@@ -104,6 +104,24 @@ remaining rule snapshot gaps are therefore valid and should not be closed by fab
 rule text from titles or subtitles. The remaining missing orderbook/price/liquidity gaps
 are for untargeted Kalshi catalog markets. This remains a manual validation path only;
 public-read scheduling is still held.
+
+A final one-market targeted follow-up used Kalshi `MARKET_DETAIL` and `ORDERBOOK` for the
+remaining market with missing orderbook, price, and liquidity coverage:
+
+- Market: `kalshi_market_kxmvesportsmultigameextended_s2026982c0208a21_e997e627e2b`
+- Status: `COMPLETED`
+- Payloads archived: 2
+- Markets processed: 1
+- Errors: 0
+- New orderbook snapshots: 1
+- New price snapshots: 1
+- New liquidity snapshots: 1
+- Coverage score moved from `80` to `88`
+
+After this run, orderbook, price, and liquidity coverage are `8 / 8`. Rule snapshot
+coverage remains `3 / 8`, and the remaining latest gaps are expected rule-snapshot and
+staleness gaps. The final `MARKET_DETAIL` payload also had `rules_primary` and
+`rules_secondary` keys present but empty, so no rule snapshot was created or fabricated.
 
 Data gaps are append-only operational evidence. A targeted run may improve the latest
 coverage report while also adding new `data_gaps` rows from the latest detection pass.
