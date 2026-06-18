@@ -141,10 +141,11 @@ book endpoint needs token-level identifiers. Do not repeat this exact shape expe
 coverage changes; add a token-aware read-only mapping first if Polymarket orderbook
 coverage needs public follow-up.
 
-Token-aware Polymarket follow-up is the next fixture-backed path. It stores Gamma market
+Token-aware Polymarket follow-up is now deployed in Azure staging. It stores Gamma market
 IDs, condition/question IDs, outcome labels, `enableOrderBook`, and YES/NO CLOB
-token/asset IDs in a first-class mapping table. After deploying that code and running
-migrations, use only a tiny manual pilot:
+token/asset IDs in a first-class mapping table. A tiny `MARKET_LIST` discovery pilot
+created one real Polymarket market and two active token mappings. A one-market targeted
+follow-up then archived one Gamma detail payload and two CLOB orderbook payloads:
 
 ```bash
 API_BASE_URL="https://your-staging-api.example.com" \
@@ -157,9 +158,13 @@ MAX_PAYLOADS=5 \
 scripts/staging_public_read_pilot.sh
 ```
 
-If the selected Polymarket market has no persisted Gamma ID or token mappings, the
-collection run should remain `PARTIAL` with a safe missing-identifier error. Do not
-fabricate token IDs or orderbook data, and do not schedule public-read collection.
+The run completed as `PARTIAL`: orderbook, price, and liquidity coverage were created for
+the selected market, while two public CLOB `PRICE_HISTORY` requests returned `400 Bad
+Request` and were recorded as ingestion errors. Treat `PRICE_HISTORY` as not yet validated
+for scheduled use. If a selected Polymarket market has no persisted Gamma ID or token
+mappings, the collection run should remain `PARTIAL` with a safe missing-identifier error.
+Do not fabricate token IDs, orderbook data, or price history, and do not schedule
+public-read collection.
 
 If public fetch is unsupported or unavailable, keep fixture staging as the validated path
 and record the failure mode in validation notes.

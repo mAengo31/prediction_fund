@@ -138,9 +138,12 @@ Kalshi targeted follow-up uses the venue market mapping external market ticker. 
 targeted follow-up is token-aware: catalog/detail normalization persists Gamma market IDs,
 condition/question IDs, outcome labels, `enableOrderBook`, and CLOB token/asset IDs in
 `venue_outcome_token_mappings`. Polymarket `MARKET_DETAIL` resolves the Gamma market ID
-from mapping metadata; Polymarket `ORDERBOOK` and `PRICE_HISTORY` resolve token/asset IDs
-from the outcome-token mapping. If a Gamma ID or token ID is missing, the collection run
-records a safe missing-identifier error instead of guessing.
+from mapping metadata, and Polymarket `ORDERBOOK` resolves token/asset IDs from the
+outcome-token mapping. Polymarket `PRICE_HISTORY` also resolves token/asset IDs, but the
+first Azure staging pilot received public CLOB `400 Bad Request` responses for token-level
+history requests; treat price history as explicit partial-run evidence until the required
+public endpoint shape is validated. If a Gamma ID or token ID is missing, the collection
+run records a safe missing-identifier error instead of guessing.
 
 Example token-aware Polymarket collection:
 

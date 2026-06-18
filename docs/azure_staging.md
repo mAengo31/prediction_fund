@@ -15,10 +15,10 @@ The first Azure staging deployment is active in:
 - PostgreSQL Flexible Server: `prediction-desk-staging-pg-cus-3bbbab`
 - ACR: `predictiondesk3bbbab44cusacr`
 
-Alembic migrations have passed through revision `20260617_0013`, and fixture staging smoke
-has passed. Tiny manual public-read pilots have been run against Kalshi only. Failed
-partial resource groups from restricted-region attempts, `prediction-desk-staging-rg` and
-`prediction-desk-staging-wus2-rg`, were deleted after explicit operator approval.
+Alembic migrations have passed through revision `20260618_0014`, and fixture staging smoke
+has passed. Tiny manual public-read pilots have been run against Kalshi and Polymarket.
+Failed partial resource groups from restricted-region attempts, `prediction-desk-staging-rg`
+and `prediction-desk-staging-wus2-rg`, were deleted after explicit operator approval.
 
 Current hardening status:
 
@@ -134,10 +134,13 @@ rather than the current canonical market mapping ID. This did not change market-
 coverage and should be treated as a safe unsupported/unavailable public-read shape, not a
 data-quality regression.
 
-Token-aware Polymarket follow-up has been prepared locally after that check. It persists
-Gamma market IDs, condition/question IDs, outcome labels, `enableOrderBook`, and YES/NO
-CLOB token/asset IDs in `venue_outcome_token_mappings`. After deployment and fixture
-smoke, the safe manual Polymarket shape is:
+Token-aware Polymarket follow-up has since been deployed. It persists Gamma market IDs,
+condition/question IDs, outcome labels, `enableOrderBook`, and YES/NO CLOB token/asset IDs
+in `venue_outcome_token_mappings`. A `MARKET_LIST` discovery pilot archived one Gamma
+catalog payload, created one real Polymarket market, and persisted two active token
+mappings for the market `New Rihanna Album before GTA VI?`.
+
+A one-market targeted Polymarket follow-up then used:
 
 ```bash
 API_BASE_URL="https://prediction-desk-staging-api.bluebush-22f9863f.centralus.azurecontainerapps.io" \
@@ -145,15 +148,31 @@ PREDICTION_DESK_API_TOKEN="..." \
 CONFIRM_PUBLIC_READ_ONLY=true \
 PUBLIC_READ_VENUES=polymarket \
 PUBLIC_READ_ENDPOINT_TYPES=MARKET_DETAIL,ORDERBOOK,PRICE_HISTORY \
-PUBLIC_READ_MARKET_IDS=polymarket_market_... \
+PUBLIC_READ_MARKET_IDS=polymarket_market_0x1fad72fae204143ff1c3035e99e7c0f65ea8d5cd9bd1070987bd1a3316f772be \
 MAX_PAYLOADS=5 \
 scripts/staging_public_read_pilot.sh
 ```
 
-This remains public-read only. It does not pass credentials, wallets, private keys, or
-trading instructions. Do not run or schedule this Polymarket pilot until the token-aware
-image has been deployed, migrations have created the token mapping table, fixture smoke
-passes, and the selected canonical Polymarket markets have persisted token mappings.
+Result:
+
+- Status: `PARTIAL`
+- Venue: `polymarket`
+- Payloads archived: 3
+- Markets processed: 1
+- Errors: 2
+- New orderbook snapshots: 2
+- New price snapshots: 2
+- New liquidity snapshots: 2
+- New quality reports: 3
+- Coverage score moved from `82` to `89`
+
+The archived payloads were one Gamma `MARKET_DETAIL` payload and two CLOB `ORDERBOOK`
+payloads. The two errors were public CLOB `PRICE_HISTORY` responses returning `400 Bad
+Request` for the token IDs. These were recorded as ingestion errors without fabricating
+history. The targeted Polymarket market now has rule, orderbook, price, and liquidity
+coverage. Remaining latest gaps are rule-snapshot gaps for other markets and stale-data
+warnings. This remains public-read only: it does not pass credentials, wallets, private
+keys, trading instructions, or authenticated CLOB requests.
 
 Data gaps are append-only operational evidence. A targeted run may improve the latest
 coverage report while also adding new `data_gaps` rows from the latest detection pass.
