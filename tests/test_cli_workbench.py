@@ -41,6 +41,23 @@ def test_cli_workbench_queue_card_and_notes_work(tmp_path: Path) -> None:
             "2026-06-16T12:00:00+00:00",
         ],
     )
+    latest_queue = runner.invoke(
+        app,
+        [
+            "workbench-queue",
+            "--database-url",
+            database_url,
+            "--latest",
+        ],
+    )
+    queue_summary = runner.invoke(
+        app,
+        [
+            "workbench-queue-summary",
+            "--database-url",
+            database_url,
+        ],
+    )
     note = runner.invoke(
         app,
         [
@@ -72,6 +89,10 @@ def test_cli_workbench_queue_card_and_notes_work(tmp_path: Path) -> None:
 
     assert queue.exit_code == 0
     assert MARKET_ID in queue.output
+    assert latest_queue.exit_code == 0
+    assert "review_action" in latest_queue.output
+    assert queue_summary.exit_code == 0
+    assert "priority_bucket_counts" in queue_summary.output
     assert card.exit_code == 0
     assert "review_action" in card.output
     assert note.exit_code == 0
@@ -80,4 +101,3 @@ def test_cli_workbench_queue_card_and_notes_work(tmp_path: Path) -> None:
     assert "CLI desk note." in notes.output
     assert run.exit_code == 0
     assert "workbench_run_" in run.output
-

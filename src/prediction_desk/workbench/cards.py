@@ -17,7 +17,10 @@ from prediction_desk.workbench.models import (
     hash_payload,
     workbench_object_id,
 )
-from prediction_desk.workbench.scoring import recommended_action, score_review_context
+from prediction_desk.workbench.scoring import (
+    recommended_action,
+    score_review_context_details,
+)
 
 
 def build_market_decision_card(
@@ -116,7 +119,7 @@ def _build_market_decision_card(
     )
     scenario = repo.get_latest_scenario_feature_asof(market_id, asof_timestamp)
     gaps = latest_data_gaps_for_market(repo, market_id, asof_timestamp, limit=100)
-    priority_score, reason_codes = score_review_context(
+    score_details = score_review_context_details(
         quality_report=quality,
         integrity_assessment=integrity,
         divergence_assessments=divergences,
@@ -125,6 +128,8 @@ def _build_market_decision_card(
         data_gaps=gaps,
         scenario_feature=scenario,
     )
+    priority_score = score_details.priority_score
+    reason_codes = score_details.reason_codes
     source_ref_ids = _dedupe(
         [
             price.price_snapshot_id if price else None,
@@ -181,7 +186,14 @@ def _build_market_decision_card(
         source_ref_ids=source_ref_ids,
         input_hash=input_hash,
         output_hash="pending",
-        metadata={"workbench_version": "desk_workbench_v1"},
+        metadata={
+            "workbench_version": "desk_workbench_v1",
+            "score_components": score_details.score_components,
+            "score_explanation": score_details.score_explanation,
+            "hard_escalators": score_details.hard_escalators,
+            "soft_escalators": score_details.soft_escalators,
+            "dampeners": score_details.dampeners,
+        },
     )
     return repo.save_market_decision_card(
         card.model_copy(update={"output_hash": compute_decision_card_output_hash(card)})

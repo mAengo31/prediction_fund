@@ -205,6 +205,7 @@ from prediction_desk.scenario.models import (
 from prediction_desk.scenario.runner import ScenarioRunError, run_scenario_import
 from prediction_desk.scenario.service import ScenarioService, ScenarioServiceError
 from prediction_desk.scoring.trust_verdict import build_trust_verdict
+from prediction_desk.workbench.enums import ReviewPriorityBucket, ReviewStatus
 from prediction_desk.workbench.models import (
     CrossVenueComparisonCard,
     DeskReviewNote,
@@ -215,6 +216,7 @@ from prediction_desk.workbench.models import (
     WorkbenchComparisonCardRequest,
     WorkbenchDecisionCardRequest,
     WorkbenchQueueBuildRequest,
+    WorkbenchQueueSummary,
     WorkbenchRun,
     WorkbenchRunConfig,
     WorkbenchRunRequest,
@@ -2982,14 +2984,62 @@ def list_workbench_queue_items(
     repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
     market_id: str | None = None,
     queue_name: str | None = None,
+    priority_bucket: ReviewPriorityBucket | None = None,
+    review_status: ReviewStatus | None = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[MarketReviewQueueItem]:
     return WorkbenchService(repo).list_queue_items(
         market_id=market_id,
         queue_name=queue_name,
+        priority_bucket=priority_bucket,
+        review_status=review_status,
         limit=limit,
         offset=offset,
+    )
+
+
+@v1_router.get(
+    "/workbench/queues/latest",
+    response_model=list[MarketReviewQueueItem],
+    dependencies=[Depends(require_api_token)],
+)
+def list_latest_workbench_queue_items(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    market_id: str | None = None,
+    queue_name: str | None = None,
+    priority_bucket: ReviewPriorityBucket | None = None,
+    review_status: ReviewStatus | None = None,
+    asof_timestamp: datetime | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[MarketReviewQueueItem]:
+    return WorkbenchService(repo).list_latest_queue_items(
+        market_id=market_id,
+        queue_name=queue_name,
+        priority_bucket=priority_bucket,
+        review_status=review_status,
+        asof_timestamp=asof_timestamp,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@v1_router.get(
+    "/workbench/queues/summary",
+    response_model=WorkbenchQueueSummary,
+    dependencies=[Depends(require_api_token)],
+)
+def summarize_workbench_queue(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    queue_name: str | None = None,
+    latest_only: bool = True,
+    asof_timestamp: datetime | None = None,
+) -> WorkbenchQueueSummary:
+    return WorkbenchService(repo).summarize_queue(
+        queue_name=queue_name,
+        latest_only=latest_only,
+        asof_timestamp=asof_timestamp,
     )
 
 

@@ -31,7 +31,8 @@ pretrade-blocked review.
 
 `MarketReviewQueueItem` stores one market review queue entry with a 0-100 priority score,
 a priority bucket, review status, primary reason code, supporting reason codes, and
-source evidence IDs.
+source evidence IDs. Queue items are append-only audit records. The active desk view uses
+the latest queue item per market.
 
 `MarketDecisionCard` aggregates the latest as-of state for one market: price, liquidity,
 data quality, rule context, integrity, equivalence, divergence, pre-trade, simulated
@@ -50,7 +51,29 @@ aggregate counts by priority, review action, and reason code.
 
 ## Queue Behavior
 
-Queue priority is deterministic. Examples:
+Queue priority is deterministic and component-based. Each queue item stores diagnostics in
+metadata:
+
+- `score_components`
+- `score_explanation`
+- `hard_escalators`
+- `soft_escalators`
+- `dampeners`
+
+Priority bucket definitions:
+
+- `CRITICAL`: hard review blockers such as a hard pre-trade no-trade restriction,
+  integrity no-trade context not caused only by sparse data, or divergence
+  `DO_NOT_COMPARE`
+- `HIGH`: manual review, divergence `NEEDS_REVIEW`, material comparison review, or a
+  non-hard pre-trade block
+- `MEDIUM`: stale data, low data quality, missing rules on ordinary discovered markets,
+  research signal review, or moderate integrity warnings
+- `LOW`: ordinary data gaps, watch-only context, or low-quality inactive discovery
+  markets
+- `INFO`: no review signal or clean watchlist context
+
+Examples:
 
 - data gaps raise data-gap review priority
 - pre-trade `NO_TRADE` or `MANUAL_REVIEW` raises pre-trade review priority
@@ -59,12 +82,20 @@ Queue priority is deterministic. Examples:
 - research signals that require review raise research review priority
 - clean markets with no review context remain low or informational
 
+`LOW_DATA_QUALITY` alone does not make an item critical. A pre-trade `NO_TRADE` is
+critical only when the underlying blocker is hard; data-quality-driven no-trade context is
+usually high review priority with diagnostics explaining the dampener.
+
 The queue does not recommend live trades.
 
 Data gaps are append-only audit rows. Queue and card scoring use gaps from the latest
 relevant coverage report as of the workbench timestamp, rather than all historical gap
 rows. This prevents an old missing-data gap from keeping a market at high review priority
 after a newer coverage report has closed that gap.
+
+Historical queue rows are also append-only. Use `GET /workbench/queues/latest` or
+`prediction-desk workbench-queue --latest` for the active desk queue. Use
+`GET /workbench/queues/items` for historical/audit readback.
 
 ## Decision Cards
 
@@ -95,6 +126,8 @@ Workbench endpoints are under `/api/v1/workbench` and use the existing bearer-to
 - `GET /workbench/runs/{workbench_run_id}/summary`
 - `POST /workbench/queues/build`
 - `GET /workbench/queues/items`
+- `GET /workbench/queues/latest`
+- `GET /workbench/queues/summary`
 - `POST /workbench/markets/{market_id}/decision-card`
 - `GET /workbench/markets/{market_id}/decision-card/latest`
 - `POST /workbench/equivalence/{equivalence_assessment_id}/comparison-card`
@@ -108,6 +141,8 @@ Workbench endpoints are under `/api/v1/workbench` and use the existing bearer-to
 ```bash
 prediction-desk workbench-build-queue --market-id mkt_cpi_yoy_at_least_3pct_2026_09
 prediction-desk workbench-queue --limit 25
+prediction-desk workbench-queue --latest --queue-name default_review_queue
+prediction-desk workbench-queue-summary --queue-name default_review_queue
 prediction-desk workbench-card --market-id mkt_cpi_yoy_at_least_3pct_2026_09
 prediction-desk workbench-run --market-id mkt_cpi_yoy_at_least_3pct_2026_09
 prediction-desk workbench-add-note \

@@ -72,7 +72,11 @@ from prediction_desk.scenario.models import ScenarioRunConfig
 from prediction_desk.scenario.runner import ScenarioRunError, run_scenario_import
 from prediction_desk.scenario.service import ScenarioService, ScenarioServiceError
 from prediction_desk.scoring.trust_verdict import build_trust_verdict
-from prediction_desk.workbench.enums import DeskReviewNoteType
+from prediction_desk.workbench.enums import (
+    DeskReviewNoteType,
+    ReviewPriorityBucket,
+    ReviewStatus,
+)
 from prediction_desk.workbench.models import (
     DeskReviewNoteCreate,
     MarketReviewQueueItem,
@@ -3645,6 +3649,17 @@ def workbench_queue_command(
     queue_name: Annotated[
         str | None, typer.Option("--queue-name", help="Review queue name.")
     ] = None,
+    latest: Annotated[
+        bool, typer.Option("--latest", help="Show the latest item per market.")
+    ] = False,
+    priority_bucket: Annotated[
+        ReviewPriorityBucket | None,
+        typer.Option("--priority-bucket", help="Filter by priority bucket."),
+    ] = None,
+    review_status: Annotated[
+        ReviewStatus | None,
+        typer.Option("--review-status", help="Filter by review status."),
+    ] = None,
     limit: Annotated[int, typer.Option("--limit", help="Maximum items.")] = 50,
     database_url: Annotated[
         str | None, typer.Option("--database-url", help="Database URL to read.")
@@ -3655,12 +3670,63 @@ def workbench_queue_command(
     engine = build_engine(database_url)
     session_factory = build_session_factory(engine)
     with session_factory() as session:
-        items = WorkbenchService(PredictionMarketRepository(session)).list_queue_items(
-            market_id=market_id,
-            queue_name=queue_name,
-            limit=limit,
+        service = WorkbenchService(PredictionMarketRepository(session))
+        items = (
+            service.list_latest_queue_items(
+                market_id=market_id,
+                queue_name=queue_name,
+                priority_bucket=priority_bucket,
+                review_status=review_status,
+                limit=limit,
+            )
+            if latest
+            else service.list_queue_items(
+                market_id=market_id,
+                queue_name=queue_name,
+                priority_bucket=priority_bucket,
+                review_status=review_status,
+                limit=limit,
+            )
         )
     _print_workbench_queue(items)
+
+
+@app.command("workbench-queue-summary")
+def workbench_queue_summary_command(
+    queue_name: Annotated[
+        str | None, typer.Option("--queue-name", help="Review queue name.")
+    ] = None,
+    latest_only: Annotated[
+        bool,
+        typer.Option(
+            "--latest-only/--historical",
+            help="Summarize latest item per market or historical queue rows.",
+        ),
+    ] = True,
+    limit: Annotated[int, typer.Option("--limit", help="Maximum rows to summarize.")] = 500,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read.")
+    ] = None,
+) -> None:
+    """Summarizes market review queue priority and reason counts."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory() as session:
+        summary = WorkbenchService(PredictionMarketRepository(session)).summarize_queue(
+            queue_name=queue_name,
+            latest_only=latest_only,
+            limit=limit,
+        )
+    rows = [
+        ("total_items", summary.total_items),
+        ("priority_bucket_counts", summary.priority_bucket_counts),
+        ("review_action_counts", summary.review_action_counts),
+        ("top_reason_codes", summary.top_reason_codes),
+        ("hard_escalator_counts", summary.hard_escalator_counts),
+        ("soft_escalator_counts", summary.soft_escalator_counts),
+    ]
+    _print_table(headers=("metric", "value"), rows=rows)
 
 
 @app.command("workbench-card")
@@ -3853,17 +3919,30 @@ def workbench_add_note_command(
 def _print_workbench_queue(items: Sequence[MarketReviewQueueItem]) -> None:
     rows = []
     for item in items:
+        metadata = item.metadata
         rows.append(
             (
                 item.market_id,
                 item.priority_score,
                 item.priority_bucket.value,
+                metadata.get("recommended_next_review_action", ""),
                 item.primary_reason_code,
+                ",".join(metadata.get("hard_escalators", [])),
+                ",".join(metadata.get("soft_escalators", [])),
                 ",".join(item.reason_codes),
             )
         )
     _print_table(
-        headers=("market_id", "priority", "bucket", "primary_reason", "reason_codes"),
+        headers=(
+            "market_id",
+            "priority",
+            "bucket",
+            "review_action",
+            "primary_reason",
+            "hard_escalators",
+            "soft_escalators",
+            "reason_codes",
+        ),
         rows=rows,
     )
 

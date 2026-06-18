@@ -170,6 +170,20 @@ class WorkbenchRunSummary(WorkbenchModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class WorkbenchQueueSummary(WorkbenchModel):
+    queue_name: str | None = None
+    latest_only: bool = True
+    asof_timestamp: datetime | None = None
+    generated_at: datetime | None = None
+    total_items: int = 0
+    priority_bucket_counts: dict[str, int] = Field(default_factory=dict)
+    review_action_counts: dict[str, int] = Field(default_factory=dict)
+    top_reason_codes: dict[str, int] = Field(default_factory=dict)
+    hard_escalator_counts: dict[str, int] = Field(default_factory=dict)
+    soft_escalator_counts: dict[str, int] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class WorkbenchRunConfig(WorkbenchModel):
     name: str | None = None
     asof_timestamp: datetime
@@ -343,4 +357,3 @@ def _json_ready(value: Any) -> Any:
     if isinstance(value, Decimal | datetime):
         return str(value)
     return value
-

@@ -10,7 +10,7 @@ from prediction_desk.workbench.cards import (
     build_cross_venue_comparison_card,
     build_market_decision_card,
 )
-from prediction_desk.workbench.enums import WorkbenchRunStatus
+from prediction_desk.workbench.enums import ReviewPriorityBucket, ReviewStatus, WorkbenchRunStatus
 from prediction_desk.workbench.models import (
     CrossVenueComparisonCard,
     DeskReviewNote,
@@ -18,6 +18,7 @@ from prediction_desk.workbench.models import (
     DeskWatchlist,
     MarketDecisionCard,
     MarketReviewQueueItem,
+    WorkbenchQueueSummary,
     WorkbenchRun,
     WorkbenchRunConfig,
     WorkbenchRunResult,
@@ -27,6 +28,7 @@ from prediction_desk.workbench.models import (
 )
 from prediction_desk.workbench.notes import create_desk_review_note
 from prediction_desk.workbench.queues import build_market_review_queue
+from prediction_desk.workbench.scoring import recommended_action
 
 
 class WorkbenchServiceError(Exception):
@@ -111,14 +113,132 @@ class WorkbenchService:
         *,
         market_id: str | None = None,
         queue_name: str | None = None,
+        priority_bucket: ReviewPriorityBucket | str | None = None,
+        review_status: ReviewStatus | str | None = None,
         limit: int = 500,
         offset: int = 0,
     ) -> list[MarketReviewQueueItem]:
         return self.repo.list_market_review_queue_items(
             market_id=market_id,
             queue_name=queue_name,
+            priority_bucket=priority_bucket,
+            review_status=review_status,
             limit=limit,
             offset=offset,
+        )
+
+    def list_latest_queue_items(
+        self,
+        *,
+        market_id: str | None = None,
+        queue_name: str | None = None,
+        priority_bucket: ReviewPriorityBucket | str | None = None,
+        review_status: ReviewStatus | str | None = None,
+        asof_timestamp: datetime | None = None,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[MarketReviewQueueItem]:
+        return self.repo.list_latest_market_review_queue_items(
+            market_id=market_id,
+            queue_name=queue_name,
+            priority_bucket=priority_bucket,
+            review_status=review_status,
+            asof_timestamp=asof_timestamp,
+            limit=limit,
+            offset=offset,
+        )
+
+    def list_latest_queue_items_for_run(
+        self,
+        workbench_run_id: str,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[MarketReviewQueueItem]:
+        run = self.get_run(workbench_run_id)
+        queue_name = str(run.metadata.get("queue_name", "default_review_queue"))
+        run_market_ids = set(run.market_ids)
+        items = self.list_latest_queue_items(
+            queue_name=queue_name,
+            asof_timestamp=run.asof_timestamp,
+            limit=10000,
+        )
+        return [item for item in items if item.market_id in run_market_ids][
+            offset : offset + limit
+        ]
+
+    def list_active_queue_view(
+        self,
+        *,
+        market_id: str | None = None,
+        queue_name: str | None = None,
+        priority_bucket: ReviewPriorityBucket | str | None = None,
+        review_status: ReviewStatus | str | None = None,
+        asof_timestamp: datetime | None = None,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[MarketReviewQueueItem]:
+        return self.list_latest_queue_items(
+            market_id=market_id,
+            queue_name=queue_name,
+            priority_bucket=priority_bucket,
+            review_status=review_status,
+            asof_timestamp=asof_timestamp,
+            limit=limit,
+            offset=offset,
+        )
+
+    def summarize_queue(
+        self,
+        *,
+        queue_name: str | None = None,
+        latest_only: bool = True,
+        asof_timestamp: datetime | None = None,
+        limit: int = 500,
+    ) -> WorkbenchQueueSummary:
+        items = (
+            self.list_latest_queue_items(
+                queue_name=queue_name,
+                asof_timestamp=asof_timestamp,
+                limit=limit,
+            )
+            if latest_only
+            else self.list_queue_items(queue_name=queue_name, limit=limit)
+        )
+        generated_at = max((item.generated_at for item in items), default=None)
+        item_asof = max((item.asof_timestamp for item in items), default=None)
+        return WorkbenchQueueSummary(
+            queue_name=queue_name,
+            latest_only=latest_only,
+            asof_timestamp=asof_timestamp or item_asof,
+            generated_at=generated_at,
+            total_items=len(items),
+            priority_bucket_counts=dict(
+                Counter(item.priority_bucket.value for item in items)
+            ),
+            review_action_counts=dict(
+                Counter(_queue_review_action(item) for item in items)
+            ),
+            top_reason_codes=dict(
+                Counter(reason for item in items for reason in item.reason_codes).most_common(
+                    20
+                )
+            ),
+            hard_escalator_counts=dict(
+                Counter(
+                    escalator
+                    for item in items
+                    for escalator in item.metadata.get("hard_escalators", [])
+                )
+            ),
+            soft_escalator_counts=dict(
+                Counter(
+                    escalator
+                    for item in items
+                    for escalator in item.metadata.get("soft_escalators", [])
+                )
+            ),
+            metadata={"workbench_version": "desk_workbench_v1"},
         )
 
     def list_decision_cards(
@@ -205,7 +325,7 @@ class WorkbenchService:
             status=WorkbenchRunStatus.RUNNING,
             asof_timestamp=config.asof_timestamp,
             market_ids=market_ids,
-            metadata=dict(config.metadata),
+            metadata={**dict(config.metadata), "queue_name": config.queue_name},
         )
         self.repo.save_workbench_run(run)
         queue_items: list[MarketReviewQueueItem] = []
@@ -336,3 +456,10 @@ def _summary_for_run(
         markets_reviewed=len(set(run.market_ids)),
         metadata={"workbench_version": "desk_workbench_v1"},
     )
+
+
+def _queue_review_action(item: MarketReviewQueueItem) -> str:
+    action = item.metadata.get("recommended_next_review_action")
+    if isinstance(action, str) and action:
+        return action
+    return recommended_action(item.reason_codes).value

@@ -37,8 +37,9 @@ verdicts are represented as replayable snapshots.
 - Data Scale / Historical Backfill / Read-Only Collection Orchestrator v1 for market
   universes, collection plans, run-once fixture collection, historical backfill records,
   coverage reports, and data-gap detection.
-- Desk Decision Workbench v1 for review queues, market decision cards, cross-venue
-  comparison cards, data-gap/pre-trade/paper/research summaries, and desk review notes.
+- Desk Decision Workbench v1 for append-only review queues, latest active queue views,
+  market decision cards, cross-venue comparison cards, data-gap/pre-trade/paper/research
+  summaries, and desk review notes.
 - A deterministic v0 resolution-risk scorer.
 - A deterministic v0 trust-verdict builder.
 - SQLAlchemy 2.0 ORM mappings and repository methods for local persistence.
@@ -165,6 +166,8 @@ Build desk review queues and decision cards:
 
 ```bash
 prediction-desk workbench-build-queue --market-id mkt_cpi_yoy_at_least_3pct_2026_09
+prediction-desk workbench-queue --latest
+prediction-desk workbench-queue-summary
 prediction-desk workbench-card --market-id mkt_cpi_yoy_at_least_3pct_2026_09
 prediction-desk workbench-add-note \
   --market-id mkt_cpi_yoy_at_least_3pct_2026_09 \

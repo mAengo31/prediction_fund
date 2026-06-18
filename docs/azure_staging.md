@@ -334,7 +334,7 @@ The cycle validates:
 - workbench queue/card generation
 - a safe desk note: `Staging desk cycle completed. No trading action.`
 
-First Azure desk-cycle result:
+First Azure desk-cycle result before queue calibration:
 
 - Markets reviewed: 9
 - Coverage score: 89
@@ -350,9 +350,19 @@ First Azure desk-cycle result:
 - Top queue reasons: integrity high risk, pretrade block/manual-review, research review
   signal, low/medium data quality, and divergence review
 
-The resulting critical queue is expected for this small staging dataset: the cycle creates
-new downstream review context and the public-read Kalshi catalog markets still have low data
-quality or missing rule snapshots. These are review findings, not trade recommendations.
+That first queue was too saturated for desk prioritization because all markets were
+critical after integrity/pretrade/research context was created. Workbench queue calibration
+keeps historical rows append-only but adds a latest active queue view and score diagnostics:
+
+- `GET /api/v1/workbench/queues/latest`
+- `GET /api/v1/workbench/queues/summary`
+- `prediction-desk workbench-queue --latest`
+- `prediction-desk workbench-queue-summary`
+
+The calibrated queue treats low data quality and ordinary missing-rule context as review
+signals without automatically making them critical. Critical priority is reserved for hard
+review blockers such as hard pre-trade no-trade restrictions, integrity no-trade context
+not caused only by sparse data, or divergence `DO_NOT_COMPARE`.
 
 ## DB Inspection
 

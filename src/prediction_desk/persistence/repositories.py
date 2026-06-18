@@ -3365,6 +3365,8 @@ class PredictionMarketRepository:
         *,
         market_id: str | None = None,
         queue_name: str | None = None,
+        priority_bucket: ReviewPriorityBucket | str | None = None,
+        review_status: ReviewStatus | str | None = None,
         limit: int = 500,
         offset: int = 0,
     ) -> list[MarketReviewQueueItem]:
@@ -3382,10 +3384,64 @@ class PredictionMarketRepository:
             stmt = stmt.where(MarketReviewQueueItemRecord.market_id == market_id)
         if queue_name is not None:
             stmt = stmt.where(MarketReviewQueueItemRecord.queue_name == queue_name)
+        if priority_bucket is not None:
+            stmt = stmt.where(
+                MarketReviewQueueItemRecord.priority_bucket == _enum_value(priority_bucket)
+            )
+        if review_status is not None:
+            stmt = stmt.where(
+                MarketReviewQueueItemRecord.review_status == _enum_value(review_status)
+            )
         return [
             _market_review_queue_item_from_record(record)
             for record in self.session.scalars(stmt)
         ]
+
+    def list_latest_market_review_queue_items(
+        self,
+        *,
+        market_id: str | None = None,
+        queue_name: str | None = None,
+        priority_bucket: ReviewPriorityBucket | str | None = None,
+        review_status: ReviewStatus | str | None = None,
+        asof_timestamp: datetime | None = None,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[MarketReviewQueueItem]:
+        stmt = select(MarketReviewQueueItemRecord).order_by(
+            MarketReviewQueueItemRecord.market_id,
+            desc(MarketReviewQueueItemRecord.generated_at),
+            desc(MarketReviewQueueItemRecord.available_at),
+            desc(MarketReviewQueueItemRecord.asof_timestamp),
+            MarketReviewQueueItemRecord.queue_item_id,
+        )
+        if market_id is not None:
+            stmt = stmt.where(MarketReviewQueueItemRecord.market_id == market_id)
+        if queue_name is not None:
+            stmt = stmt.where(MarketReviewQueueItemRecord.queue_name == queue_name)
+        if asof_timestamp is not None:
+            stmt = stmt.where(MarketReviewQueueItemRecord.available_at <= asof_timestamp)
+        latest_by_market: dict[str, MarketReviewQueueItem] = {}
+        for record in self.session.scalars(stmt):
+            if record.market_id in latest_by_market:
+                continue
+            latest_by_market[record.market_id] = _market_review_queue_item_from_record(record)
+        items = list(latest_by_market.values())
+        if priority_bucket is not None:
+            bucket_value = _enum_value(priority_bucket)
+            items = [item for item in items if item.priority_bucket.value == bucket_value]
+        if review_status is not None:
+            status_value = _enum_value(review_status)
+            items = [item for item in items if item.review_status.value == status_value]
+        items = sorted(
+            items,
+            key=lambda item: (
+                -item.priority_score,
+                item.priority_bucket.value,
+                item.market_id,
+            ),
+        )
+        return items[offset : offset + limit]
 
     def save_market_decision_card(self, card: MarketDecisionCard) -> MarketDecisionCard:
         self.session.merge(_market_decision_card_to_record(card))
@@ -4044,6 +4100,10 @@ def _market_review_queue_item_from_record(
         latest_paper_order_ids=list(record.latest_paper_order_ids),
         metadata=_metadata(record.metadata_json),
     )
+
+
+def _enum_value(value: Any) -> str:
+    return str(getattr(value, "value", value))
 
 
 def _market_decision_card_to_record(card: MarketDecisionCard) -> MarketDecisionCardRecord:

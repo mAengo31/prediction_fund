@@ -13,7 +13,9 @@ deterministic cross-venue divergence assessments as research context only after
 equivalence permits comparison. DataOps endpoints add read-only market universes,
 collection plans, historical backfill records, coverage reports, and gap detection.
 The desk workbench endpoints add review queues, decision cards, comparison cards, and
-desk notes over stored evidence. They do not add execution authority.
+desk notes over stored evidence. Queue history is append-only, while latest queue and
+summary endpoints provide the active deduplicated desk view. They do not add execution
+authority.
 
 It is not a trading system. This deployment surface intentionally includes no live trading,
 no venue credentials, no private keys, no wallets, and no order placement.

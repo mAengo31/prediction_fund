@@ -254,7 +254,7 @@ def main() -> int:
         f"run_id={(research or {}).get('run', {}).get('research_run_id')}"
     )
 
-    queue_items = api_call(
+    api_call(
         "POST",
         "/api/v1/workbench/queues/build",
         {
@@ -265,20 +265,25 @@ def main() -> int:
             "force": False,
         },
     )
-    priority_counts = Counter(item.get("priority_bucket") for item in queue_items)
-    reason_counts: Counter[str] = Counter()
-    for item in queue_items:
-        reason_counts.update(item.get("reason_codes") or [])
+    queue_query = parse.urlencode({"queue_name": "staging_desk_cycle", "limit": 500})
+    queue_items = api_call("GET", f"/api/v1/workbench/queues/latest?{queue_query}")
+    summary_query = parse.urlencode(
+        {"queue_name": "staging_desk_cycle", "latest_only": "true"}
+    )
+    queue_summary = api_call("GET", f"/api/v1/workbench/queues/summary?{summary_query}")
     print(
         "workbench_queue "
         f"items={len(queue_items)} "
-        f"priority_counts={json.dumps(dict(sorted(priority_counts.items())), sort_keys=True)} "
-        f"top_reasons={json.dumps(dict(reason_counts.most_common(10)), sort_keys=True)}"
+        f"priority_counts={json.dumps(queue_summary.get('priority_bucket_counts', {}), sort_keys=True)} "
+        f"top_reasons={json.dumps(queue_summary.get('top_reason_codes', {}), sort_keys=True)} "
+        f"hard_escalators={json.dumps(queue_summary.get('hard_escalator_counts', {}), sort_keys=True)} "
+        f"soft_escalators={json.dumps(queue_summary.get('soft_escalator_counts', {}), sort_keys=True)}"
     )
 
-    top_items = sorted(queue_items, key=lambda item: (-item["priority_score"], item["market_id"]))[:5]
+    top_items = sorted(queue_items, key=lambda item: (-item["priority_score"], item["market_id"]))[:10]
     print("top_queue_items")
     for item in top_items:
+        metadata = item.get("metadata") or {}
         print(
             json.dumps(
                 {
@@ -287,9 +292,10 @@ def main() -> int:
                     "priority_score": item["priority_score"],
                     "priority_bucket": item["priority_bucket"],
                     "primary_reason_code": item["primary_reason_code"],
-                    "review_action": (item.get("metadata") or {}).get(
-                        "recommended_next_review_action"
-                    ),
+                    "review_action": metadata.get("recommended_next_review_action"),
+                    "hard_escalators": metadata.get("hard_escalators", []),
+                    "soft_escalators": metadata.get("soft_escalators", []),
+                    "dampeners": metadata.get("dampeners", []),
                     "reason_codes": item.get("reason_codes", [])[:8],
                 },
                 sort_keys=True,

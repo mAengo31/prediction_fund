@@ -21,6 +21,8 @@ def test_api_workbench_queue_card_and_notes_work(
             "market_ids": [MARKET_ID],
         },
     )
+    latest_queue = client.get("/api/v1/workbench/queues/latest")
+    queue_summary = client.get("/api/v1/workbench/queues/summary")
     card = client.post(
         f"/api/v1/workbench/markets/{MARKET_ID}/decision-card",
         json={"asof_timestamp": "2026-06-16T12:00:00Z"},
@@ -41,6 +43,10 @@ def test_api_workbench_queue_card_and_notes_work(
 
     assert queue.status_code == 200
     assert queue.json()[0]["market_id"] == MARKET_ID
+    assert latest_queue.status_code == 200
+    assert latest_queue.json()[0]["market_id"] == MARKET_ID
+    assert queue_summary.status_code == 200
+    assert queue_summary.json()["total_items"] == 1
     assert card.status_code == 200
     assert card.json()["market_id"] == MARKET_ID
     assert latest.status_code == 200
@@ -49,4 +55,3 @@ def test_api_workbench_queue_card_and_notes_work(
     assert notes.json()[0]["note_id"] == note.json()["note_id"]
     assert run.status_code == 200
     assert run.json()["summary"]["total_queue_items"] == 1
-

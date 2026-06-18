@@ -15,7 +15,7 @@ from prediction_desk.workbench.models import (
 from prediction_desk.workbench.scoring import (
     priority_bucket,
     recommended_action,
-    score_review_context,
+    score_review_context_details,
 )
 
 
@@ -84,7 +84,7 @@ def _build_market_review_queue(
         ]
         scenario = repo.get_latest_scenario_feature_asof(market_id, asof_timestamp)
         gaps = latest_data_gaps_for_market(repo, market_id, asof_timestamp, limit=100)
-        score, reason_codes = score_review_context(
+        score_details = score_review_context_details(
             quality_report=quality,
             integrity_assessment=integrity,
             divergence_assessments=divergences,
@@ -93,6 +93,8 @@ def _build_market_review_queue(
             data_gaps=gaps,
             scenario_feature=scenario,
         )
+        score = score_details.priority_score
+        reason_codes = score_details.reason_codes
         evidence_ref_ids = _dedupe(
             [
                 quality.quality_report_id if quality else None,
@@ -153,6 +155,11 @@ def _build_market_review_queue(
             metadata={
                 "workbench_version": "desk_workbench_v1",
                 "recommended_next_review_action": recommended_action(reason_codes).value,
+                "score_components": score_details.score_components,
+                "score_explanation": score_details.score_explanation,
+                "hard_escalators": score_details.hard_escalators,
+                "soft_escalators": score_details.soft_escalators,
+                "dampeners": score_details.dampeners,
             },
         )
         items.append(repo.save_market_review_queue_item(item))
