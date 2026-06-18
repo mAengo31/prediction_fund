@@ -378,7 +378,7 @@ def score_review_context_details(
     if hard_escalators:
         score = max(score, 85)
     elif score >= 85:
-        score = min(score, 89 if len(_dedupe(soft_escalators)) >= 4 else 84)
+        score = 84
 
     if not reasons:
         reasons.append("NO_REVIEW_SIGNAL")
