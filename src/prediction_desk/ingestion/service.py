@@ -634,7 +634,7 @@ def _collect_polymarket_targeted_payloads(
         if remaining <= 0:
             break
         if endpoint_type == VenueEndpointType.MARKET_DETAIL:
-            identifier = _polymarket_gamma_identifier(mapping)
+            identifier = _polymarket_gamma_identifier(repo, mapping)
             if identifier is None:
                 errors.append(
                     _pre_error(
@@ -749,7 +749,9 @@ def _collect_polymarket_targeted_payloads(
     return payloads, errors
 
 
-def _polymarket_gamma_identifier(mapping: VenueMarketMapping) -> str | None:
+def _polymarket_gamma_identifier(
+    repo: PredictionMarketRepository, mapping: VenueMarketMapping
+) -> str | None:
     metadata = mapping.metadata
     for key in ("gamma_market_id", "gamma_id", "market_id"):
         value = metadata.get(key)
@@ -759,6 +761,15 @@ def _polymarket_gamma_identifier(mapping: VenueMarketMapping) -> str | None:
     external_market_id = mapping.external_market_id
     if external_market_id and not external_market_id.startswith("0x"):
         return external_market_id
+    token_mappings = repo.list_venue_outcome_token_mappings(
+        venue_name=mapping.venue_name,
+        canonical_market_id=mapping.canonical_market_id,
+        status=VenueOutcomeTokenStatus.ACTIVE,
+        limit=20,
+    )
+    for token_mapping in token_mappings:
+        if token_mapping.gamma_market_id:
+            return token_mapping.gamma_market_id
     return None
 
 

@@ -221,6 +221,30 @@ def test_polymarket_manual_public_detail_resolves_gamma_id_from_mapping(
     assert mappings[0].gamma_market_id == "pm-nyc-temp-20260704"
 
 
+def test_polymarket_manual_public_detail_resolves_gamma_id_from_token_mapping(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _patch_polymarket_public_fetches(monkeypatch)
+    factory = _factory(tmp_path, "dataops_polymarket_detail_token_gamma.db")
+    with factory.begin() as session:
+        repo = PredictionMarketRepository(session)
+        _save_polymarket_market_mapping_and_tokens(repo, drop_mapping_gamma_id=True)
+        result = run_collection_once(
+            venue_names=["polymarket"],
+            market_ids=["polymarket_market_0xabc123nyctemp"],
+            endpoint_types=["MARKET_DETAIL"],
+            mode="MANUAL_PUBLIC_FETCH",
+            allow_network=True,
+            max_payloads=5,
+            repo=repo,
+        )
+
+    assert result.run.status.value == "COMPLETED"
+    assert result.run.payloads_archived == 1
+    assert calls == [("detail", "pm-nyc-temp-20260704")]
+
+
 def test_polymarket_manual_public_detail_missing_gamma_id_records_safe_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -562,6 +586,7 @@ def _save_polymarket_market_mapping_and_tokens(
     repo: PredictionMarketRepository,
     *,
     gamma_market_id: str | None = "pm-nyc-temp-20260704",
+    drop_mapping_gamma_id: bool = False,
     save_tokens: bool = True,
     enable_orderbook: bool | None = True,
     only_yes_token: bool = False,
@@ -624,7 +649,7 @@ def _save_polymarket_market_mapping_and_tokens(
     metadata = {
         "condition_id": "0xabc123nyctemp",
         "question_id": "0xquestion123",
-        "gamma_market_id": gamma_market_id,
+        "gamma_market_id": None if drop_mapping_gamma_id else gamma_market_id,
         "enable_orderbook": enable_orderbook,
     }
     repo.upsert_venue_market_mapping(
