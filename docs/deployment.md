@@ -192,6 +192,18 @@ scripts/staging_workbench_smoke.sh
 The workbench smoke builds review artifacts only. It does not call public-read endpoints
 or add execution authority.
 
+Run the fuller desk-analysis cycle over existing staging data:
+
+```bash
+API_BASE_URL="https://your-staging-api.example.com" \
+PREDICTION_DESK_API_TOKEN="..." \
+scripts/staging_desk_cycle.sh
+```
+
+The desk cycle may create integrity, equivalence, divergence, pretrade, simulated paper,
+research, workbench, and desk-note artifacts from stored staging data. It does not call
+public-read collection and does not enable trading.
+
 Run the tiny public-read pilot only after explicit approval:
 
 ```bash

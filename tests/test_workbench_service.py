@@ -167,6 +167,7 @@ def test_clean_market_gets_low_or_info_priority(tmp_path: Path) -> None:
         item = WorkbenchService(repo).build_queue(ASOF, market_ids=[MARKET_ID])[0]
 
     assert item.priority_score < 45
+    assert item.metadata["recommended_next_review_action"] in {"WATCH_ONLY", "NO_ACTION"}
 
 
 def test_decision_card_aggregates_without_future_lookahead(tmp_path: Path) -> None:

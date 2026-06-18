@@ -293,6 +293,7 @@ export API_BASE_URL="https://<container-app-fqdn>"
 export PREDICTION_DESK_API_TOKEN="<secret>"
 scripts/azure_staging_smoke.sh
 scripts/staging_workbench_smoke.sh
+scripts/staging_desk_cycle.sh
 ```
 
 This wraps `scripts/staging_smoke.sh` and validates health, readiness, market readback,
@@ -313,6 +314,45 @@ Latest workbench staging validation:
   runs, and 4 workbench run summaries.
 
 Public-read scheduling remains held.
+
+## Staging Desk Cycle
+
+`scripts/staging_desk_cycle.sh` runs a full desk-analysis cycle over existing staging data
+only. It does not call public-read collection, does not schedule collection, and does not
+touch venue trading endpoints.
+
+The cycle validates:
+
+- health/readiness
+- coverage and gap recomputation
+- integrity analysis
+- equivalence scan and divergence scan when comparable markets exist
+- default pretrade and paper policies
+- pretrade checks across current markets
+- one tiny simulated paper intent only when existing market data is eligible
+- default research strategies and a small research run
+- workbench queue/card generation
+- a safe desk note: `Staging desk cycle completed. No trading action.`
+
+First Azure desk-cycle result:
+
+- Markets reviewed: 9
+- Coverage score: 89
+- Latest gaps: 5 missing rule snapshots and 9 stale-market-data rows
+- Integrity assessments: 9
+- Equivalence assessments: 1
+- Divergence assessments: 1
+- Pretrade decisions after the cycle: 16 total
+- Paper artifacts: 1 simulated paper order, 0 fills
+- Research artifacts: 6 signals, 6 proposals, 6 traces, 1 research run
+- Workbench queue: 9 items, all critical after integrity/pretrade/research context was
+  created
+- Top queue reasons: integrity high risk, pretrade block/manual-review, research review
+  signal, low/medium data quality, and divergence review
+
+The resulting critical queue is expected for this small staging dataset: the cycle creates
+new downstream review context and the public-read Kalshi catalog markets still have low data
+quality or missing rule snapshots. These are review findings, not trade recommendations.
 
 ## DB Inspection
 

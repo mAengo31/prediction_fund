@@ -134,6 +134,18 @@ creates and reads a decision card, and writes a safe observation note:
 
 It does not call public venue endpoints and does not perform execution.
 
+For a full staging desk-analysis cycle over existing stored data:
+
+```bash
+API_BASE_URL="https://prediction-desk-staging-api.bluebush-22f9863f.centralus.azurecontainerapps.io" \
+PREDICTION_DESK_API_TOKEN="<secret>" \
+scripts/staging_desk_cycle.sh
+```
+
+This recomputes coverage/gaps, integrity, equivalence/divergence where possible, pretrade
+context, simulated paper context, research context, workbench queue/cards, and a desk note.
+It does not call public-read collection or schedule any job.
+
 ## Prohibited
 
 The workbench does not add:

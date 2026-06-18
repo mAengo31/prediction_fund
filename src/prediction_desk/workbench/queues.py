@@ -12,7 +12,11 @@ from prediction_desk.workbench.models import (
     MarketReviewQueueItem,
     workbench_object_id,
 )
-from prediction_desk.workbench.scoring import priority_bucket, score_review_context
+from prediction_desk.workbench.scoring import (
+    priority_bucket,
+    recommended_action,
+    score_review_context,
+)
 
 
 def build_market_review_queue(
@@ -146,7 +150,10 @@ def _build_market_review_queue(
                 item.research_signal_id for item in research_signals
             ],
             latest_paper_order_ids=[item.paper_order_id for item in paper_orders],
-            metadata={"workbench_version": "desk_workbench_v1"},
+            metadata={
+                "workbench_version": "desk_workbench_v1",
+                "recommended_next_review_action": recommended_action(reason_codes).value,
+            },
         )
         items.append(repo.save_market_review_queue_item(item))
     return sorted(items, key=lambda item: (-item.priority_score, item.market_id))[:limit]
