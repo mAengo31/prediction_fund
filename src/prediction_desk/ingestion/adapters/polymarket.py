@@ -14,6 +14,8 @@ from prediction_desk.ingestion.models import RawVenuePayload
 
 POLYMARKET_GAMMA_BASE_URL = "https://gamma-api.polymarket.com"
 POLYMARKET_CLOB_BASE_URL = "https://clob.polymarket.com"
+POLYMARKET_PRICE_HISTORY_DEFAULT_INTERVAL = "1d"
+POLYMARKET_PRICE_HISTORY_DEFAULT_FIDELITY_MINUTES = 60
 USER_AGENT = "prediction-desk/0.1 read-only research"
 
 
@@ -155,6 +157,8 @@ class PolymarketReadOnlyAdapter(FixtureBackedAdapter):
         *,
         allow_network: bool = False,
         captured_at: datetime | None = None,
+        interval: str = POLYMARKET_PRICE_HISTORY_DEFAULT_INTERVAL,
+        fidelity: int = POLYMARKET_PRICE_HISTORY_DEFAULT_FIDELITY_MINUTES,
     ) -> RawVenuePayload:
         if not allow_network:
             return self._fixture_by_type_and_token_id(
@@ -166,7 +170,11 @@ class PolymarketReadOnlyAdapter(FixtureBackedAdapter):
             source_url=f"{POLYMARKET_CLOB_BASE_URL}/prices-history",
             endpoint_type=VenueEndpointType.PRICE_HISTORY,
             external_id=token_id,
-            params={"market": token_id},
+            params={
+                "market": token_id,
+                "interval": interval,
+                "fidelity": fidelity,
+            },
             captured_at=captured_at,
         )
 

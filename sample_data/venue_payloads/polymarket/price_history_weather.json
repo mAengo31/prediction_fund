@@ -4,7 +4,9 @@
   "captured_at": "2026-06-16T12:10:00Z",
   "source_url": "fixture://polymarket/clob/prices-history",
   "request_params": {
-    "market": "0xabc123nyctemp"
+    "market": "1111111111111111111111111111111111111111111111111111111111111111",
+    "interval": "1d",
+    "fidelity": 60
   },
   "response_payload": {
     "history": [
