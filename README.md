@@ -37,6 +37,8 @@ verdicts are represented as replayable snapshots.
 - Data Scale / Historical Backfill / Read-Only Collection Orchestrator v1 for market
   universes, collection plans, run-once fixture collection, historical backfill records,
   coverage reports, and data-gap detection.
+- Desk Decision Workbench v1 for review queues, market decision cards, cross-venue
+  comparison cards, data-gap/pre-trade/paper/research summaries, and desk review notes.
 - A deterministic v0 resolution-risk scorer.
 - A deterministic v0 trust-verdict builder.
 - SQLAlchemy 2.0 ORM mappings and repository methods for local persistence.
@@ -157,6 +159,16 @@ prediction-desk market-data-derive --all
 prediction-desk market-data-latest --market-id kalshi_market_kxweather_nyc_rain_20260930
 prediction-desk market-data-prices --market-id kalshi_market_kxweather_nyc_rain_20260930
 prediction-desk data-quality --market-id kalshi_market_kxweather_nyc_rain_20260930
+```
+
+Build desk review queues and decision cards:
+
+```bash
+prediction-desk workbench-build-queue --market-id mkt_cpi_yoy_at_least_3pct_2026_09
+prediction-desk workbench-card --market-id mkt_cpi_yoy_at_least_3pct_2026_09
+prediction-desk workbench-add-note \
+  --market-id mkt_cpi_yoy_at_least_3pct_2026_09 \
+  --text "Reviewed latest data quality and pre-trade context."
 ```
 
 Analyze fast-lane integrity signals:

@@ -184,6 +184,10 @@ Coverage and gap reports help strategy research and simulated paper runs underst
 availability. They do not change pre-trade or paper execution behavior directly in v1.
 They also do not create live venue access or execution authority.
 
+Desk Workbench v1 consumes the same coverage and gap reports to build review queues and
+decision cards. Gaps can increase review priority, but they do not create collection
+schedules, venue credentials, or execution authority.
+
 Interpret current coverage from the latest `DataCoverageReport`. Interpret cumulative
 `DataGap` row counts as history of detection passes, not as the current number of open
 gaps. For public-read pilots, do not close missing-rule gaps unless the archived public

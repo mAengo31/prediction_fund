@@ -72,6 +72,14 @@ from prediction_desk.scenario.models import ScenarioRunConfig
 from prediction_desk.scenario.runner import ScenarioRunError, run_scenario_import
 from prediction_desk.scenario.service import ScenarioService, ScenarioServiceError
 from prediction_desk.scoring.trust_verdict import build_trust_verdict
+from prediction_desk.workbench.enums import DeskReviewNoteType
+from prediction_desk.workbench.models import (
+    DeskReviewNoteCreate,
+    MarketReviewQueueItem,
+    WorkbenchRunConfig,
+)
+from prediction_desk.workbench.runner import WorkbenchRunError, run_workbench_build
+from prediction_desk.workbench.service import WorkbenchService, WorkbenchServiceError
 
 app = typer.Typer(no_args_is_help=True)
 DECIMAL_ZERO = Decimal("0")
@@ -3547,6 +3555,316 @@ def dataops_cycle_command(
                 result.metadata,
             )
         ],
+    )
+
+
+@app.command("workbench-run")
+def workbench_run_command(
+    name: Annotated[str | None, typer.Option("--name", help="Run name.")] = None,
+    asof: Annotated[str | None, typer.Option("--asof", help="As-of ISO timestamp.")] = None,
+    market_id: Annotated[
+        list[str] | None,
+        typer.Option("--market-id", help="Market ID; repeatable."),
+    ] = None,
+    queue_name: Annotated[
+        str, typer.Option("--queue-name", help="Review queue name.")
+    ] = "default_review_queue",
+    limit: Annotated[int, typer.Option("--limit", help="Maximum markets.")] = 500,
+    force: Annotated[bool, typer.Option("--force", help="Rebuild existing hashes.")] = False,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read/write.")
+    ] = None,
+) -> None:
+    """Builds review queues and decision cards for desk review."""
+
+    config = WorkbenchRunConfig(
+        name=name,
+        asof_timestamp=_parse_datetime(asof) if asof else datetime.now(tz=UTC),
+        market_ids=list(market_id or []) or None,
+        queue_name=queue_name,
+        limit=limit,
+        force=force,
+    )
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            result = run_workbench_build(config, repo=PredictionMarketRepository(session))
+        except WorkbenchRunError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+
+    _print_table(
+        headers=("run_id", "queue_items", "cards", "comparison_cards", "errors"),
+        rows=[
+            (
+                result.run.workbench_run_id,
+                result.summary.total_queue_items,
+                result.summary.total_decision_cards,
+                result.summary.total_comparison_cards,
+                result.run.errors_count,
+            )
+        ],
+    )
+
+
+@app.command("workbench-build-queue")
+def workbench_build_queue_command(
+    asof: Annotated[str | None, typer.Option("--asof", help="As-of ISO timestamp.")] = None,
+    market_id: Annotated[
+        list[str] | None,
+        typer.Option("--market-id", help="Market ID; repeatable."),
+    ] = None,
+    queue_name: Annotated[
+        str, typer.Option("--queue-name", help="Review queue name.")
+    ] = "default_review_queue",
+    limit: Annotated[int, typer.Option("--limit", help="Maximum items.")] = 500,
+    force: Annotated[bool, typer.Option("--force", help="Rebuild existing items.")] = False,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read/write.")
+    ] = None,
+) -> None:
+    """Builds a market review queue."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        items = WorkbenchService(PredictionMarketRepository(session)).build_queue(
+            _parse_datetime(asof) if asof else datetime.now(tz=UTC),
+            market_ids=list(market_id or []) or None,
+            queue_name=queue_name,
+            limit=limit,
+            force=force,
+        )
+    _print_workbench_queue(items)
+
+
+@app.command("workbench-queue")
+def workbench_queue_command(
+    market_id: Annotated[str | None, typer.Option("--market-id", help="Market ID.")] = None,
+    queue_name: Annotated[
+        str | None, typer.Option("--queue-name", help="Review queue name.")
+    ] = None,
+    limit: Annotated[int, typer.Option("--limit", help="Maximum items.")] = 50,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read.")
+    ] = None,
+) -> None:
+    """Lists market review queue items."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory() as session:
+        items = WorkbenchService(PredictionMarketRepository(session)).list_queue_items(
+            market_id=market_id,
+            queue_name=queue_name,
+            limit=limit,
+        )
+    _print_workbench_queue(items)
+
+
+@app.command("workbench-card")
+def workbench_card_command(
+    market_id: Annotated[str, typer.Option("--market-id", help="Market ID.")],
+    asof: Annotated[str | None, typer.Option("--asof", help="As-of ISO timestamp.")] = None,
+    force: Annotated[bool, typer.Option("--force", help="Rebuild existing card.")] = False,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read/write.")
+    ] = None,
+) -> None:
+    """Builds a market decision card."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            card = WorkbenchService(PredictionMarketRepository(session)).build_decision_card(
+                market_id,
+                _parse_datetime(asof) if asof else datetime.now(tz=UTC),
+                force=force,
+            )
+        except WorkbenchServiceError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+
+    _print_table(
+        headers=(
+            "market_id",
+            "priority",
+            "review_action",
+            "latest_price",
+            "spread",
+            "pretrade_action",
+            "divergence_status",
+            "reason_codes",
+        ),
+        rows=[
+            (
+                card.market_id,
+                card.review_priority_score,
+                card.recommended_next_review_action.value,
+                card.latest_price or "",
+                card.spread or "",
+                card.pretrade_summary.get("action", ""),
+                ",".join(card.divergence_summary.get("status_counts", {}).keys()),
+                ",".join(card.review_reason_codes),
+            )
+        ],
+    )
+
+
+@app.command("workbench-comparison-card")
+def workbench_comparison_card_command(
+    equivalence_assessment_id: Annotated[
+        str,
+        typer.Option("--equivalence-assessment-id", help="Equivalence assessment ID."),
+    ],
+    asof: Annotated[str | None, typer.Option("--asof", help="As-of ISO timestamp.")] = None,
+    force: Annotated[bool, typer.Option("--force", help="Rebuild existing card.")] = False,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read/write.")
+    ] = None,
+) -> None:
+    """Builds a cross-venue comparison card."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            card = WorkbenchService(PredictionMarketRepository(session)).build_comparison_card(
+                equivalence_assessment_id,
+                _parse_datetime(asof) if asof else datetime.now(tz=UTC),
+                force=force,
+            )
+        except WorkbenchServiceError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+    _print_table(
+        headers=(
+            "comparison_card_id",
+            "left_market_id",
+            "right_market_id",
+            "equivalence_status",
+            "divergence_status",
+            "review_action",
+            "reason_codes",
+        ),
+        rows=[
+            (
+                card.comparison_card_id,
+                card.left_market_id,
+                card.right_market_id,
+                card.equivalence_status,
+                card.divergence_status or "",
+                card.recommended_next_review_action.value,
+                ",".join(card.reason_codes),
+            )
+        ],
+    )
+
+
+@app.command("workbench-notes")
+def workbench_notes_command(
+    market_id: Annotated[str | None, typer.Option("--market-id", help="Market ID.")] = None,
+    limit: Annotated[int, typer.Option("--limit", help="Maximum notes.")] = 50,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read.")
+    ] = None,
+) -> None:
+    """Lists desk review notes."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory() as session:
+        notes = WorkbenchService(PredictionMarketRepository(session)).list_notes(
+            market_id=market_id,
+            limit=limit,
+        )
+    _print_table(
+        headers=("note_id", "market_id", "note_type", "author", "text"),
+        rows=[
+            (
+                note.note_id,
+                note.market_id or "",
+                note.note_type.value,
+                note.author or "",
+                note.text[:80],
+            )
+            for note in notes
+        ],
+    )
+
+
+@app.command("workbench-add-note")
+def workbench_add_note_command(
+    text: Annotated[str, typer.Option("--text", help="Note text.")],
+    market_id: Annotated[str | None, typer.Option("--market-id", help="Market ID.")] = None,
+    queue_item_id: Annotated[
+        str | None, typer.Option("--queue-item-id", help="Queue item ID.")
+    ] = None,
+    decision_card_id: Annotated[
+        str | None, typer.Option("--decision-card-id", help="Decision card ID.")
+    ] = None,
+    comparison_card_id: Annotated[
+        str | None, typer.Option("--comparison-card-id", help="Comparison card ID.")
+    ] = None,
+    author: Annotated[str | None, typer.Option("--author", help="Author label.")] = None,
+    note_type: Annotated[
+        str, typer.Option("--note-type", help="OBSERVATION, DATA_ISSUE, etc.")
+    ] = "OBSERVATION",
+    tag: Annotated[
+        list[str] | None,
+        typer.Option("--tag", help="Note tag; repeatable."),
+    ] = None,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to write.")
+    ] = None,
+) -> None:
+    """Adds a desk review journal note."""
+
+    request = DeskReviewNoteCreate(
+        market_id=market_id,
+        queue_item_id=queue_item_id,
+        decision_card_id=decision_card_id,
+        comparison_card_id=comparison_card_id,
+        author=author,
+        note_type=DeskReviewNoteType(str(note_type).upper()),
+        text=text,
+        tags=list(tag or []),
+    )
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        note = WorkbenchService(PredictionMarketRepository(session)).create_note(request)
+    _print_table(
+        headers=("note_id", "market_id", "note_type", "author", "tags"),
+        rows=[
+            (
+                note.note_id,
+                note.market_id or "",
+                note.note_type.value,
+                note.author or "",
+                ",".join(note.tags),
+            )
+        ],
+    )
+
+
+def _print_workbench_queue(items: Sequence[MarketReviewQueueItem]) -> None:
+    rows = []
+    for item in items:
+        rows.append(
+            (
+                item.market_id,
+                item.priority_score,
+                item.priority_bucket.value,
+                item.primary_reason_code,
+                ",".join(item.reason_codes),
+            )
+        )
+    _print_table(
+        headers=("market_id", "priority", "bucket", "primary_reason", "reason_codes"),
+        rows=rows,
     )
 
 

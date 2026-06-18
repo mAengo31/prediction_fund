@@ -205,6 +205,24 @@ from prediction_desk.scenario.models import (
 from prediction_desk.scenario.runner import ScenarioRunError, run_scenario_import
 from prediction_desk.scenario.service import ScenarioService, ScenarioServiceError
 from prediction_desk.scoring.trust_verdict import build_trust_verdict
+from prediction_desk.workbench.models import (
+    CrossVenueComparisonCard,
+    DeskReviewNote,
+    DeskReviewNoteCreate,
+    DeskWatchlist,
+    MarketDecisionCard,
+    MarketReviewQueueItem,
+    WorkbenchComparisonCardRequest,
+    WorkbenchDecisionCardRequest,
+    WorkbenchQueueBuildRequest,
+    WorkbenchRun,
+    WorkbenchRunConfig,
+    WorkbenchRunRequest,
+    WorkbenchRunResult,
+    WorkbenchRunSummary,
+)
+from prediction_desk.workbench.runner import WorkbenchRunError, run_workbench_build
+from prediction_desk.workbench.service import WorkbenchService, WorkbenchServiceError
 
 health_router = APIRouter()
 v1_router = APIRouter(prefix="/api/v1")
@@ -2862,6 +2880,232 @@ def get_latest_market_research(
     )
 
 
+@v1_router.post(
+    "/workbench/runs",
+    response_model=WorkbenchRunResult,
+    dependencies=[Depends(require_api_token)],
+)
+def create_workbench_run(
+    request_body: WorkbenchRunRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> WorkbenchRunResult:
+    config = WorkbenchRunConfig(
+        **{
+            **request_body.model_dump(),
+            "asof_timestamp": request_body.asof_timestamp or datetime.now(tz=UTC),
+        }
+    )
+    try:
+        return run_workbench_build(config, repo=repo)
+    except WorkbenchRunError as exc:
+        raise _workbench_run_http_error(exc) from exc
+
+
+@v1_router.get(
+    "/workbench/runs",
+    response_model=list[WorkbenchRun],
+    dependencies=[Depends(require_api_token)],
+)
+def list_workbench_runs(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[WorkbenchRun]:
+    return WorkbenchService(repo).list_runs(limit=limit, offset=offset)
+
+
+@v1_router.get(
+    "/workbench/runs/{workbench_run_id}",
+    response_model=WorkbenchRun,
+    dependencies=[Depends(require_api_token)],
+)
+def get_workbench_run(
+    workbench_run_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> WorkbenchRun:
+    try:
+        return WorkbenchService(repo).get_run(workbench_run_id)
+    except WorkbenchServiceError as exc:
+        raise _workbench_http_error(exc) from exc
+
+
+@v1_router.get(
+    "/workbench/runs/{workbench_run_id}/summary",
+    response_model=WorkbenchRunSummary,
+    dependencies=[Depends(require_api_token)],
+)
+def get_workbench_run_summary(
+    workbench_run_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> WorkbenchRunSummary:
+    try:
+        return WorkbenchService(repo).get_run_summary(workbench_run_id)
+    except WorkbenchServiceError as exc:
+        raise _workbench_http_error(exc) from exc
+
+
+@v1_router.post(
+    "/workbench/watchlists/default",
+    response_model=list[DeskWatchlist],
+    dependencies=[Depends(require_api_token)],
+)
+def create_workbench_default_watchlists(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> list[DeskWatchlist]:
+    return WorkbenchService(repo).create_default_watchlists_if_missing()
+
+
+@v1_router.post(
+    "/workbench/queues/build",
+    response_model=list[MarketReviewQueueItem],
+    dependencies=[Depends(require_api_token)],
+)
+def build_workbench_queue(
+    request_body: WorkbenchQueueBuildRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> list[MarketReviewQueueItem]:
+    return WorkbenchService(repo).build_queue(
+        request_body.asof_timestamp or datetime.now(tz=UTC),
+        market_ids=request_body.market_ids,
+        queue_name=request_body.queue_name,
+        limit=request_body.limit,
+        force=request_body.force,
+    )
+
+
+@v1_router.get(
+    "/workbench/queues/items",
+    response_model=list[MarketReviewQueueItem],
+    dependencies=[Depends(require_api_token)],
+)
+def list_workbench_queue_items(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    market_id: str | None = None,
+    queue_name: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[MarketReviewQueueItem]:
+    return WorkbenchService(repo).list_queue_items(
+        market_id=market_id,
+        queue_name=queue_name,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@v1_router.post(
+    "/workbench/markets/{market_id}/decision-card",
+    response_model=MarketDecisionCard,
+    dependencies=[Depends(require_api_token)],
+)
+def build_workbench_decision_card(
+    market_id: str,
+    request_body: WorkbenchDecisionCardRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> MarketDecisionCard:
+    try:
+        return WorkbenchService(repo).build_decision_card(
+            market_id,
+            request_body.asof_timestamp or datetime.now(tz=UTC),
+            force=request_body.force,
+        )
+    except WorkbenchServiceError as exc:
+        raise _workbench_http_error(exc) from exc
+
+
+@v1_router.get(
+    "/workbench/markets/{market_id}/decision-card/latest",
+    response_model=MarketDecisionCard,
+    dependencies=[Depends(require_api_token)],
+)
+def get_latest_workbench_decision_card(
+    market_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> MarketDecisionCard:
+    try:
+        return WorkbenchService(repo).get_latest_decision_card(market_id)
+    except WorkbenchServiceError as exc:
+        raise _workbench_http_error(exc) from exc
+
+
+@v1_router.post(
+    "/workbench/equivalence/{equivalence_assessment_id}/comparison-card",
+    response_model=CrossVenueComparisonCard,
+    dependencies=[Depends(require_api_token)],
+)
+def build_workbench_comparison_card(
+    equivalence_assessment_id: str,
+    request_body: WorkbenchComparisonCardRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> CrossVenueComparisonCard:
+    try:
+        return WorkbenchService(repo).build_comparison_card(
+            equivalence_assessment_id,
+            request_body.asof_timestamp or datetime.now(tz=UTC),
+            force=request_body.force,
+        )
+    except WorkbenchServiceError as exc:
+        raise _workbench_http_error(exc) from exc
+
+
+@v1_router.get(
+    "/workbench/comparison-cards",
+    response_model=list[CrossVenueComparisonCard],
+    dependencies=[Depends(require_api_token)],
+)
+def list_workbench_comparison_cards(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[CrossVenueComparisonCard]:
+    return WorkbenchService(repo).list_comparison_cards(limit=limit, offset=offset)
+
+
+@v1_router.post(
+    "/workbench/notes",
+    response_model=DeskReviewNote,
+    dependencies=[Depends(require_api_token)],
+)
+def create_workbench_note(
+    request_body: DeskReviewNoteCreate,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> DeskReviewNote:
+    return WorkbenchService(repo).create_note(request_body)
+
+
+@v1_router.get(
+    "/workbench/notes",
+    response_model=list[DeskReviewNote],
+    dependencies=[Depends(require_api_token)],
+)
+def list_workbench_notes(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    market_id: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[DeskReviewNote]:
+    return WorkbenchService(repo).list_notes(
+        market_id=market_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@v1_router.get(
+    "/workbench/notes/{note_id}",
+    response_model=DeskReviewNote,
+    dependencies=[Depends(require_api_token)],
+)
+def get_workbench_note(
+    note_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> DeskReviewNote:
+    try:
+        return WorkbenchService(repo).get_note(note_id)
+    except WorkbenchServiceError as exc:
+        raise _workbench_http_error(exc) from exc
+
+
 def _settings(request: Request) -> Settings:
     return cast(Settings, request.app.state.settings)
 
@@ -3092,3 +3336,25 @@ def _dataops_http_error(exc: DataOpsServiceError) -> HTTPException:
     else:
         status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     return HTTPException(status_code=status_code, detail=exc.code)
+
+
+def _workbench_http_error(exc: WorkbenchServiceError) -> HTTPException:
+    if exc.code in {
+        "decision_card_not_found",
+        "desk_review_note_not_found",
+        "equivalence_assessment_not_found",
+        "market_not_found",
+        "workbench_run_not_found",
+        "workbench_run_summary_not_found",
+    }:
+        status_code = status.HTTP_404_NOT_FOUND
+    else:
+        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    return HTTPException(status_code=status_code, detail=exc.code)
+
+
+def _workbench_run_http_error(exc: WorkbenchRunError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=exc.code,
+    )

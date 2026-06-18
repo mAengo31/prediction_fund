@@ -174,6 +174,19 @@ Common API failures use this envelope:
 | `GET` | `/api/v1/research/runs/{research_run_id}/summary` | Configurable | Read one research run summary. |
 | `GET` | `/api/v1/research/runs/{research_run_id}/attribution` | Configurable | Read one simulated research attribution report. |
 | `GET` | `/api/v1/markets/{market_id}/research/latest` | Configurable | Latest research signals, proposals, and traces for one market. |
+| `POST` | `/api/v1/workbench/runs` | Configurable | Build a synchronous desk workbench queue/card run. |
+| `GET` | `/api/v1/workbench/runs` | Configurable | List desk workbench runs. |
+| `GET` | `/api/v1/workbench/runs/{workbench_run_id}` | Configurable | Read one desk workbench run. |
+| `GET` | `/api/v1/workbench/runs/{workbench_run_id}/summary` | Configurable | Read one desk workbench run summary. |
+| `POST` | `/api/v1/workbench/queues/build` | Configurable | Build a review queue from as-of backend evidence. |
+| `GET` | `/api/v1/workbench/queues/items` | Configurable | List review queue items. |
+| `POST` | `/api/v1/workbench/markets/{market_id}/decision-card` | Configurable | Build a market decision card for desk review. |
+| `GET` | `/api/v1/workbench/markets/{market_id}/decision-card/latest` | Configurable | Latest stored decision card for one market. |
+| `POST` | `/api/v1/workbench/equivalence/{equivalence_assessment_id}/comparison-card` | Configurable | Build a cross-venue comparison review card. |
+| `GET` | `/api/v1/workbench/comparison-cards` | Configurable | List cross-venue comparison cards. |
+| `POST` | `/api/v1/workbench/notes` | Configurable | Create an internal desk review note. |
+| `GET` | `/api/v1/workbench/notes` | Configurable | List desk review notes. |
+| `GET` | `/api/v1/workbench/notes/{note_id}` | Configurable | Read one desk review note. |
 | `POST` | `/api/v1/replay/runs` | Configurable | Run a synchronous point-in-time admissibility replay. |
 | `GET` | `/api/v1/replay/runs/{run_id}` | Configurable | Stored replay run metadata. |
 | `GET` | `/api/v1/replay/runs/{run_id}/steps` | Configurable | Paginated replay steps. |

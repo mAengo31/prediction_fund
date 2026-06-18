@@ -2300,3 +2300,182 @@ class DataRetentionPolicyRecord(Base):
     quality_report_retention_days: Mapped[int | None] = mapped_column()
     archive_before_delete: Mapped[bool] = mapped_column(nullable=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class DeskWatchlistRecord(Base):
+    __tablename__ = "desk_watchlists"
+
+    watchlist_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    is_active: Mapped[bool] = mapped_column(nullable=False, index=True)
+    market_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    tags: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class MarketReviewQueueItemRecord(Base):
+    __tablename__ = "market_review_queue_items"
+
+    queue_item_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    market_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    asof_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    queue_name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    priority_score: Mapped[int] = mapped_column(nullable=False, index=True)
+    priority_bucket: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    review_status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    primary_reason_code: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    reason_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    evidence_ref_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    latest_quality_report_id: Mapped[str | None] = mapped_column(String(128))
+    latest_integrity_assessment_id: Mapped[str | None] = mapped_column(String(128))
+    latest_equivalence_assessment_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    latest_divergence_assessment_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    latest_pretrade_decision_id: Mapped[str | None] = mapped_column(String(128))
+    latest_research_signal_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    latest_paper_order_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class MarketDecisionCardRecord(Base):
+    __tablename__ = "market_decision_cards"
+
+    decision_card_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    market_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    asof_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(1024), nullable=False)
+    venue_name: Mapped[str | None] = mapped_column(String(256), index=True)
+    market_status: Mapped[str | None] = mapped_column(String(64), index=True)
+    category: Mapped[str | None] = mapped_column(String(128), index=True)
+    latest_price: Mapped[Decimal | None] = mapped_column(Numeric(30, 10))
+    bid: Mapped[Decimal | None] = mapped_column(Numeric(30, 10))
+    ask: Mapped[Decimal | None] = mapped_column(Numeric(30, 10))
+    spread: Mapped[Decimal | None] = mapped_column(Numeric(30, 10))
+    liquidity_summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    data_quality_summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    rule_summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    integrity_summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    equivalence_summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    divergence_summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    pretrade_summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    paper_summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    research_summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    scenario_summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    data_gap_summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    review_priority_score: Mapped[int] = mapped_column(nullable=False, index=True)
+    review_reason_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    recommended_next_review_action: Mapped[str] = mapped_column(
+        String(64), nullable=False, index=True
+    )
+    source_ref_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    output_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class CrossVenueComparisonCardRecord(Base):
+    __tablename__ = "cross_venue_comparison_cards"
+
+    comparison_card_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    equivalence_assessment_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, index=True
+    )
+    divergence_assessment_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    asof_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    left_market_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    right_market_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    equivalence_status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    comparison_permission: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    equivalence_score: Mapped[int | None] = mapped_column()
+    divergence_status: Mapped[str | None] = mapped_column(String(64), index=True)
+    divergence_score: Mapped[int | None] = mapped_column()
+    aligned_price_summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    liquidity_comparison: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    data_quality_comparison: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    rule_comparison: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    integrity_comparison: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    reason_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    recommended_next_review_action: Mapped[str] = mapped_column(
+        String(64), nullable=False, index=True
+    )
+    source_ref_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class DeskReviewNoteRecord(Base):
+    __tablename__ = "desk_review_notes"
+
+    note_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    market_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    queue_item_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    decision_card_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    comparison_card_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    author: Mapped[str | None] = mapped_column(String(256), index=True)
+    note_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    tags: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class WorkbenchRunRecord(Base):
+    __tablename__ = "workbench_runs"
+
+    workbench_run_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    name: Mapped[str | None] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    asof_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    market_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    queues_built: Mapped[int] = mapped_column(nullable=False)
+    cards_built: Mapped[int] = mapped_column(nullable=False)
+    comparison_cards_built: Mapped[int] = mapped_column(nullable=False)
+    errors_count: Mapped[int] = mapped_column(nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class WorkbenchRunSummaryRecord(Base):
+    __tablename__ = "workbench_run_summaries"
+
+    summary_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    workbench_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    total_queue_items: Mapped[int] = mapped_column(nullable=False)
+    total_decision_cards: Mapped[int] = mapped_column(nullable=False)
+    total_comparison_cards: Mapped[int] = mapped_column(nullable=False)
+    priority_counts: Mapped[dict[str, int]] = mapped_column(JSON, nullable=False)
+    review_action_counts: Mapped[dict[str, int]] = mapped_column(JSON, nullable=False)
+    top_reason_codes: Mapped[dict[str, int]] = mapped_column(JSON, nullable=False)
+    markets_reviewed: Mapped[int] = mapped_column(nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)

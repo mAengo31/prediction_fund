@@ -121,6 +121,10 @@ Research feature building uses repository methods that honor as-of semantics:
 Generated research features set `available_at` to the research as-of timestamp so replay
 can use them deterministically.
 
+Desk Workbench v1 reads stored research signals, proposals, and traces as review context.
+It summarizes research records on decision cards, but it does not make trade
+recommendations or bypass the pre-trade gate.
+
 ## Gate And Paper Dependencies
 
 Proposal evaluation always calls Pre-Trade Gate before optional paper simulation.

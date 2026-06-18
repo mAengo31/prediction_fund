@@ -137,6 +137,7 @@ from prediction_desk.persistence.orm import (
     BackfillSegmentRecord,
     CollectionPlanRecord,
     CollectionRunRecord,
+    CrossVenueComparisonCardRecord,
     CrossVenueDivergenceAssessmentRecord,
     CrossVenueDivergenceRunRecord,
     CrossVenueDivergenceRunSummaryRecord,
@@ -145,6 +146,8 @@ from prediction_desk.persistence.orm import (
     DataCoverageReportRecord,
     DataGapRecord,
     DataRetentionPolicyRecord,
+    DeskReviewNoteRecord,
+    DeskWatchlistRecord,
     EquivalenceCandidateRecord,
     EquivalenceClassRecord,
     EquivalenceRunRecord,
@@ -159,12 +162,14 @@ from prediction_desk.persistence.orm import (
     IntegrityRunSummaryRecord,
     IntegritySignalRecord,
     MarketDataQualityReportRecord,
+    MarketDecisionCardRecord,
     MarketEquivalenceAssessmentRecord,
     MarketFeatureSnapshotRecord,
     MarketLiquiditySnapshotRecord,
     MarketPriceSnapshotRecord,
     MarketRecord,
     MarketRestrictionRuleRecord,
+    MarketReviewQueueItemRecord,
     MarketRuleSnapshotRecord,
     MarketUniverseDefinitionRecord,
     MarketUniverseMemberRecord,
@@ -212,6 +217,8 @@ from prediction_desk.persistence.orm import (
     VenueMarketMappingRecord,
     VenueOutcomeTokenMappingRecord,
     VenueRecord,
+    WorkbenchRunRecord,
+    WorkbenchRunSummaryRecord,
 )
 from prediction_desk.pretrade.enums import (
     ExposureSource,
@@ -284,6 +291,22 @@ from prediction_desk.scenario.models import (
     ScenarioRunSummary,
     ScenarioSeedBundle,
     ScenarioSimulationSpec,
+)
+from prediction_desk.workbench.enums import (
+    DeskReviewNoteType,
+    RecommendedReviewAction,
+    ReviewPriorityBucket,
+    ReviewStatus,
+    WorkbenchRunStatus,
+)
+from prediction_desk.workbench.models import (
+    CrossVenueComparisonCard,
+    DeskReviewNote,
+    DeskWatchlist,
+    MarketDecisionCard,
+    MarketReviewQueueItem,
+    WorkbenchRun,
+    WorkbenchRunSummary,
 )
 
 
@@ -3257,6 +3280,8 @@ class PredictionMarketRepository:
     def list_data_gaps(
         self,
         *,
+        market_id: str | None = None,
+        asof_timestamp: datetime | None = None,
         limit: int = 500,
         offset: int = 0,
     ) -> list[DataGap]:
@@ -3266,6 +3291,10 @@ class PredictionMarketRepository:
             .limit(limit)
             .offset(offset)
         )
+        if market_id is not None:
+            stmt = stmt.where(DataGapRecord.market_id == market_id)
+        if asof_timestamp is not None:
+            stmt = stmt.where(DataGapRecord.end_time <= asof_timestamp)
         return [_data_gap_from_record(record) for record in self.session.scalars(stmt)]
 
     def save_data_retention_policy(
@@ -3289,6 +3318,240 @@ class PredictionMarketRepository:
             .offset(offset)
         )
         return [_data_retention_policy_from_record(record) for record in self.session.scalars(stmt)]
+
+    def save_desk_watchlist(self, watchlist: DeskWatchlist) -> DeskWatchlist:
+        self.session.merge(_desk_watchlist_to_record(watchlist))
+        self.session.flush()
+        return watchlist
+
+    def get_desk_watchlist(self, watchlist_id: str) -> DeskWatchlist | None:
+        record = self.session.get(DeskWatchlistRecord, watchlist_id)
+        return _desk_watchlist_from_record(record) if record else None
+
+    def list_desk_watchlists(
+        self,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[DeskWatchlist]:
+        stmt = (
+            select(DeskWatchlistRecord)
+            .order_by(DeskWatchlistRecord.name, DeskWatchlistRecord.watchlist_id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_desk_watchlist_from_record(record) for record in self.session.scalars(stmt)]
+
+    def save_market_review_queue_item(
+        self,
+        item: MarketReviewQueueItem,
+    ) -> MarketReviewQueueItem:
+        self.session.merge(_market_review_queue_item_to_record(item))
+        self.session.flush()
+        return item
+
+    def get_market_review_queue_item(
+        self,
+        queue_item_id: str,
+    ) -> MarketReviewQueueItem | None:
+        record = self.session.get(MarketReviewQueueItemRecord, queue_item_id)
+        return _market_review_queue_item_from_record(record) if record else None
+
+    def list_market_review_queue_items(
+        self,
+        *,
+        market_id: str | None = None,
+        queue_name: str | None = None,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[MarketReviewQueueItem]:
+        stmt = (
+            select(MarketReviewQueueItemRecord)
+            .order_by(
+                desc(MarketReviewQueueItemRecord.priority_score),
+                desc(MarketReviewQueueItemRecord.available_at),
+                MarketReviewQueueItemRecord.market_id,
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        if market_id is not None:
+            stmt = stmt.where(MarketReviewQueueItemRecord.market_id == market_id)
+        if queue_name is not None:
+            stmt = stmt.where(MarketReviewQueueItemRecord.queue_name == queue_name)
+        return [
+            _market_review_queue_item_from_record(record)
+            for record in self.session.scalars(stmt)
+        ]
+
+    def save_market_decision_card(self, card: MarketDecisionCard) -> MarketDecisionCard:
+        self.session.merge(_market_decision_card_to_record(card))
+        self.session.flush()
+        return card
+
+    def find_market_decision_card_by_hash(
+        self,
+        input_hash: str,
+    ) -> MarketDecisionCard | None:
+        stmt = (
+            select(MarketDecisionCardRecord)
+            .where(MarketDecisionCardRecord.input_hash == input_hash)
+            .order_by(MarketDecisionCardRecord.decision_card_id)
+            .limit(1)
+        )
+        record = self.session.scalar(stmt)
+        return _market_decision_card_from_record(record) if record else None
+
+    def get_latest_market_decision_card(
+        self,
+        market_id: str,
+    ) -> MarketDecisionCard | None:
+        stmt = (
+            select(MarketDecisionCardRecord)
+            .where(MarketDecisionCardRecord.market_id == market_id)
+            .order_by(
+                desc(MarketDecisionCardRecord.available_at),
+                desc(MarketDecisionCardRecord.generated_at),
+                MarketDecisionCardRecord.decision_card_id,
+            )
+            .limit(1)
+        )
+        record = self.session.scalar(stmt)
+        return _market_decision_card_from_record(record) if record else None
+
+    def list_market_decision_cards(
+        self,
+        *,
+        market_id: str | None = None,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[MarketDecisionCard]:
+        stmt = (
+            select(MarketDecisionCardRecord)
+            .order_by(
+                desc(MarketDecisionCardRecord.available_at),
+                MarketDecisionCardRecord.decision_card_id,
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        if market_id is not None:
+            stmt = stmt.where(MarketDecisionCardRecord.market_id == market_id)
+        return [
+            _market_decision_card_from_record(record)
+            for record in self.session.scalars(stmt)
+        ]
+
+    def save_cross_venue_comparison_card(
+        self,
+        card: CrossVenueComparisonCard,
+    ) -> CrossVenueComparisonCard:
+        self.session.merge(_cross_venue_comparison_card_to_record(card))
+        self.session.flush()
+        return card
+
+    def get_cross_venue_comparison_card(
+        self,
+        comparison_card_id: str,
+    ) -> CrossVenueComparisonCard | None:
+        record = self.session.get(CrossVenueComparisonCardRecord, comparison_card_id)
+        return _cross_venue_comparison_card_from_record(record) if record else None
+
+    def list_cross_venue_comparison_cards(
+        self,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[CrossVenueComparisonCard]:
+        stmt = (
+            select(CrossVenueComparisonCardRecord)
+            .order_by(
+                desc(CrossVenueComparisonCardRecord.asof_timestamp),
+                CrossVenueComparisonCardRecord.comparison_card_id,
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        return [
+            _cross_venue_comparison_card_from_record(record)
+            for record in self.session.scalars(stmt)
+        ]
+
+    def save_desk_review_note(self, note: DeskReviewNote) -> DeskReviewNote:
+        self.session.merge(_desk_review_note_to_record(note))
+        self.session.flush()
+        return note
+
+    def get_desk_review_note(self, note_id: str) -> DeskReviewNote | None:
+        record = self.session.get(DeskReviewNoteRecord, note_id)
+        return _desk_review_note_from_record(record) if record else None
+
+    def list_desk_review_notes(
+        self,
+        *,
+        market_id: str | None = None,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[DeskReviewNote]:
+        stmt = (
+            select(DeskReviewNoteRecord)
+            .order_by(desc(DeskReviewNoteRecord.created_at), DeskReviewNoteRecord.note_id)
+            .limit(limit)
+            .offset(offset)
+        )
+        if market_id is not None:
+            stmt = stmt.where(DeskReviewNoteRecord.market_id == market_id)
+        return [_desk_review_note_from_record(record) for record in self.session.scalars(stmt)]
+
+    def save_workbench_run(self, run: WorkbenchRun) -> WorkbenchRun:
+        self.session.merge(_workbench_run_to_record(run))
+        self.session.flush()
+        return run
+
+    def update_workbench_run(self, run: WorkbenchRun) -> WorkbenchRun:
+        return self.save_workbench_run(run)
+
+    def get_workbench_run(self, workbench_run_id: str) -> WorkbenchRun | None:
+        record = self.session.get(WorkbenchRunRecord, workbench_run_id)
+        return _workbench_run_from_record(record) if record else None
+
+    def list_workbench_runs(
+        self,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[WorkbenchRun]:
+        stmt = (
+            select(WorkbenchRunRecord)
+            .order_by(desc(WorkbenchRunRecord.created_at), WorkbenchRunRecord.workbench_run_id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_workbench_run_from_record(record) for record in self.session.scalars(stmt)]
+
+    def save_workbench_run_summary(
+        self,
+        summary: WorkbenchRunSummary,
+    ) -> WorkbenchRunSummary:
+        self.session.merge(_workbench_run_summary_to_record(summary))
+        self.session.flush()
+        return summary
+
+    def get_workbench_run_summary(
+        self,
+        workbench_run_id: str,
+    ) -> WorkbenchRunSummary | None:
+        stmt = (
+            select(WorkbenchRunSummaryRecord)
+            .where(WorkbenchRunSummaryRecord.workbench_run_id == workbench_run_id)
+            .order_by(
+                desc(WorkbenchRunSummaryRecord.created_at),
+                WorkbenchRunSummaryRecord.summary_id,
+            )
+            .limit(1)
+        )
+        record = self.session.scalar(stmt)
+        return _workbench_run_summary_from_record(record) if record else None
 
 
 def _metadata(value: dict[str, Any] | None) -> dict[str, Any]:
@@ -3696,6 +3959,320 @@ def _data_retention_policy_from_record(record: DataRetentionPolicyRecord) -> Dat
         liquidity_snapshot_retention_days=record.liquidity_snapshot_retention_days,
         quality_report_retention_days=record.quality_report_retention_days,
         archive_before_delete=record.archive_before_delete,
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _desk_watchlist_to_record(watchlist: DeskWatchlist) -> DeskWatchlistRecord:
+    return DeskWatchlistRecord(
+        watchlist_id=watchlist.watchlist_id,
+        name=watchlist.name,
+        description=watchlist.description,
+        created_at=watchlist.created_at,
+        is_active=watchlist.is_active,
+        market_ids=list(watchlist.market_ids),
+        tags=list(watchlist.tags),
+        metadata_json=_json_metadata(watchlist.metadata),
+    )
+
+
+def _desk_watchlist_from_record(record: DeskWatchlistRecord) -> DeskWatchlist:
+    return DeskWatchlist(
+        watchlist_id=record.watchlist_id,
+        name=record.name,
+        description=record.description,
+        created_at=record.created_at,
+        is_active=record.is_active,
+        market_ids=list(record.market_ids),
+        tags=list(record.tags),
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _market_review_queue_item_to_record(
+    item: MarketReviewQueueItem,
+) -> MarketReviewQueueItemRecord:
+    return MarketReviewQueueItemRecord(
+        queue_item_id=item.queue_item_id,
+        market_id=item.market_id,
+        asof_timestamp=item.asof_timestamp,
+        generated_at=item.generated_at,
+        available_at=item.available_at,
+        queue_name=item.queue_name,
+        priority_score=item.priority_score,
+        priority_bucket=item.priority_bucket.value,
+        review_status=item.review_status.value,
+        primary_reason_code=item.primary_reason_code,
+        reason_codes=list(item.reason_codes),
+        evidence_ref_ids=list(item.evidence_ref_ids),
+        latest_quality_report_id=item.latest_quality_report_id,
+        latest_integrity_assessment_id=item.latest_integrity_assessment_id,
+        latest_equivalence_assessment_ids=list(item.latest_equivalence_assessment_ids),
+        latest_divergence_assessment_ids=list(item.latest_divergence_assessment_ids),
+        latest_pretrade_decision_id=item.latest_pretrade_decision_id,
+        latest_research_signal_ids=list(item.latest_research_signal_ids),
+        latest_paper_order_ids=list(item.latest_paper_order_ids),
+        metadata_json=_json_metadata(item.metadata),
+    )
+
+
+def _market_review_queue_item_from_record(
+    record: MarketReviewQueueItemRecord,
+) -> MarketReviewQueueItem:
+    return MarketReviewQueueItem(
+        queue_item_id=record.queue_item_id,
+        market_id=record.market_id,
+        asof_timestamp=record.asof_timestamp,
+        generated_at=record.generated_at,
+        available_at=record.available_at,
+        queue_name=record.queue_name,
+        priority_score=record.priority_score,
+        priority_bucket=ReviewPriorityBucket(record.priority_bucket),
+        review_status=ReviewStatus(record.review_status),
+        primary_reason_code=record.primary_reason_code,
+        reason_codes=list(record.reason_codes),
+        evidence_ref_ids=list(record.evidence_ref_ids),
+        latest_quality_report_id=record.latest_quality_report_id,
+        latest_integrity_assessment_id=record.latest_integrity_assessment_id,
+        latest_equivalence_assessment_ids=list(record.latest_equivalence_assessment_ids),
+        latest_divergence_assessment_ids=list(record.latest_divergence_assessment_ids),
+        latest_pretrade_decision_id=record.latest_pretrade_decision_id,
+        latest_research_signal_ids=list(record.latest_research_signal_ids),
+        latest_paper_order_ids=list(record.latest_paper_order_ids),
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _market_decision_card_to_record(card: MarketDecisionCard) -> MarketDecisionCardRecord:
+    return MarketDecisionCardRecord(
+        decision_card_id=card.decision_card_id,
+        market_id=card.market_id,
+        asof_timestamp=card.asof_timestamp,
+        generated_at=card.generated_at,
+        available_at=card.available_at,
+        title=card.title,
+        venue_name=card.venue_name,
+        market_status=card.market_status,
+        category=card.category,
+        latest_price=card.latest_price,
+        bid=card.bid,
+        ask=card.ask,
+        spread=card.spread,
+        liquidity_summary=_json_metadata(card.liquidity_summary),
+        data_quality_summary=_json_metadata(card.data_quality_summary),
+        rule_summary=_json_metadata(card.rule_summary),
+        integrity_summary=_json_metadata(card.integrity_summary),
+        equivalence_summary=_json_metadata(card.equivalence_summary),
+        divergence_summary=_json_metadata(card.divergence_summary),
+        pretrade_summary=_json_metadata(card.pretrade_summary),
+        paper_summary=_json_metadata(card.paper_summary),
+        research_summary=_json_metadata(card.research_summary),
+        scenario_summary=_json_metadata(card.scenario_summary),
+        data_gap_summary=_json_metadata(card.data_gap_summary),
+        review_priority_score=card.review_priority_score,
+        review_reason_codes=list(card.review_reason_codes),
+        recommended_next_review_action=card.recommended_next_review_action.value,
+        source_ref_ids=list(card.source_ref_ids),
+        input_hash=card.input_hash,
+        output_hash=card.output_hash,
+        metadata_json=_json_metadata(card.metadata),
+    )
+
+
+def _market_decision_card_from_record(record: MarketDecisionCardRecord) -> MarketDecisionCard:
+    return MarketDecisionCard(
+        decision_card_id=record.decision_card_id,
+        market_id=record.market_id,
+        asof_timestamp=record.asof_timestamp,
+        generated_at=record.generated_at,
+        available_at=record.available_at,
+        title=record.title,
+        venue_name=record.venue_name,
+        market_status=record.market_status,
+        category=record.category,
+        latest_price=record.latest_price,
+        bid=record.bid,
+        ask=record.ask,
+        spread=record.spread,
+        liquidity_summary=_metadata(record.liquidity_summary),
+        data_quality_summary=_metadata(record.data_quality_summary),
+        rule_summary=_metadata(record.rule_summary),
+        integrity_summary=_metadata(record.integrity_summary),
+        equivalence_summary=_metadata(record.equivalence_summary),
+        divergence_summary=_metadata(record.divergence_summary),
+        pretrade_summary=_metadata(record.pretrade_summary),
+        paper_summary=_metadata(record.paper_summary),
+        research_summary=_metadata(record.research_summary),
+        scenario_summary=_metadata(record.scenario_summary),
+        data_gap_summary=_metadata(record.data_gap_summary),
+        review_priority_score=record.review_priority_score,
+        review_reason_codes=list(record.review_reason_codes),
+        recommended_next_review_action=RecommendedReviewAction(
+            record.recommended_next_review_action
+        ),
+        source_ref_ids=list(record.source_ref_ids),
+        input_hash=record.input_hash,
+        output_hash=record.output_hash,
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _cross_venue_comparison_card_to_record(
+    card: CrossVenueComparisonCard,
+) -> CrossVenueComparisonCardRecord:
+    return CrossVenueComparisonCardRecord(
+        comparison_card_id=card.comparison_card_id,
+        equivalence_assessment_id=card.equivalence_assessment_id,
+        divergence_assessment_id=card.divergence_assessment_id,
+        asof_timestamp=card.asof_timestamp,
+        left_market_id=card.left_market_id,
+        right_market_id=card.right_market_id,
+        equivalence_status=card.equivalence_status,
+        comparison_permission=card.comparison_permission,
+        equivalence_score=card.equivalence_score,
+        divergence_status=card.divergence_status,
+        divergence_score=card.divergence_score,
+        aligned_price_summary=_json_metadata(card.aligned_price_summary),
+        liquidity_comparison=_json_metadata(card.liquidity_comparison),
+        data_quality_comparison=_json_metadata(card.data_quality_comparison),
+        rule_comparison=_json_metadata(card.rule_comparison),
+        integrity_comparison=_json_metadata(card.integrity_comparison),
+        reason_codes=list(card.reason_codes),
+        recommended_next_review_action=card.recommended_next_review_action.value,
+        source_ref_ids=list(card.source_ref_ids),
+        metadata_json=_json_metadata(card.metadata),
+    )
+
+
+def _cross_venue_comparison_card_from_record(
+    record: CrossVenueComparisonCardRecord,
+) -> CrossVenueComparisonCard:
+    return CrossVenueComparisonCard(
+        comparison_card_id=record.comparison_card_id,
+        equivalence_assessment_id=record.equivalence_assessment_id,
+        divergence_assessment_id=record.divergence_assessment_id,
+        asof_timestamp=record.asof_timestamp,
+        left_market_id=record.left_market_id,
+        right_market_id=record.right_market_id,
+        equivalence_status=record.equivalence_status,
+        comparison_permission=record.comparison_permission,
+        equivalence_score=record.equivalence_score,
+        divergence_status=record.divergence_status,
+        divergence_score=record.divergence_score,
+        aligned_price_summary=_metadata(record.aligned_price_summary),
+        liquidity_comparison=_metadata(record.liquidity_comparison),
+        data_quality_comparison=_metadata(record.data_quality_comparison),
+        rule_comparison=_metadata(record.rule_comparison),
+        integrity_comparison=_metadata(record.integrity_comparison),
+        reason_codes=list(record.reason_codes),
+        recommended_next_review_action=RecommendedReviewAction(
+            record.recommended_next_review_action
+        ),
+        source_ref_ids=list(record.source_ref_ids),
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _desk_review_note_to_record(note: DeskReviewNote) -> DeskReviewNoteRecord:
+    return DeskReviewNoteRecord(
+        note_id=note.note_id,
+        created_at=note.created_at,
+        market_id=note.market_id,
+        queue_item_id=note.queue_item_id,
+        decision_card_id=note.decision_card_id,
+        comparison_card_id=note.comparison_card_id,
+        author=note.author,
+        note_type=note.note_type.value,
+        text=note.text,
+        tags=list(note.tags),
+        metadata_json=_json_metadata(note.metadata),
+    )
+
+
+def _desk_review_note_from_record(record: DeskReviewNoteRecord) -> DeskReviewNote:
+    return DeskReviewNote(
+        note_id=record.note_id,
+        created_at=record.created_at,
+        market_id=record.market_id,
+        queue_item_id=record.queue_item_id,
+        decision_card_id=record.decision_card_id,
+        comparison_card_id=record.comparison_card_id,
+        author=record.author,
+        note_type=DeskReviewNoteType(record.note_type),
+        text=record.text,
+        tags=list(record.tags),
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _workbench_run_to_record(run: WorkbenchRun) -> WorkbenchRunRecord:
+    return WorkbenchRunRecord(
+        workbench_run_id=run.workbench_run_id,
+        name=run.name,
+        created_at=run.created_at,
+        started_at=run.started_at,
+        completed_at=run.completed_at,
+        status=run.status.value,
+        asof_timestamp=run.asof_timestamp,
+        market_ids=list(run.market_ids),
+        queues_built=run.queues_built,
+        cards_built=run.cards_built,
+        comparison_cards_built=run.comparison_cards_built,
+        errors_count=run.errors_count,
+        metadata_json=_json_metadata(run.metadata),
+    )
+
+
+def _workbench_run_from_record(record: WorkbenchRunRecord) -> WorkbenchRun:
+    return WorkbenchRun(
+        workbench_run_id=record.workbench_run_id,
+        name=record.name,
+        created_at=record.created_at,
+        started_at=record.started_at,
+        completed_at=record.completed_at,
+        status=WorkbenchRunStatus(record.status),
+        asof_timestamp=record.asof_timestamp,
+        market_ids=list(record.market_ids),
+        queues_built=record.queues_built,
+        cards_built=record.cards_built,
+        comparison_cards_built=record.comparison_cards_built,
+        errors_count=record.errors_count,
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _workbench_run_summary_to_record(
+    summary: WorkbenchRunSummary,
+) -> WorkbenchRunSummaryRecord:
+    return WorkbenchRunSummaryRecord(
+        summary_id=summary.summary_id,
+        workbench_run_id=summary.workbench_run_id,
+        created_at=summary.created_at,
+        total_queue_items=summary.total_queue_items,
+        total_decision_cards=summary.total_decision_cards,
+        total_comparison_cards=summary.total_comparison_cards,
+        priority_counts=dict(summary.priority_counts),
+        review_action_counts=dict(summary.review_action_counts),
+        top_reason_codes=dict(summary.top_reason_codes),
+        markets_reviewed=summary.markets_reviewed,
+        metadata_json=_json_metadata(summary.metadata),
+    )
+
+
+def _workbench_run_summary_from_record(
+    record: WorkbenchRunSummaryRecord,
+) -> WorkbenchRunSummary:
+    return WorkbenchRunSummary(
+        summary_id=record.summary_id,
+        workbench_run_id=record.workbench_run_id,
+        created_at=record.created_at,
+        total_queue_items=record.total_queue_items,
+        total_decision_cards=record.total_decision_cards,
+        total_comparison_cards=record.total_comparison_cards,
+        priority_counts=dict(record.priority_counts),
+        review_action_counts=dict(record.review_action_counts),
+        top_reason_codes=dict(record.top_reason_codes),
+        markets_reviewed=record.markets_reviewed,
         metadata=_metadata(record.metadata_json),
     )
 
