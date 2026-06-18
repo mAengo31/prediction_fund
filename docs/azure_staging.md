@@ -401,15 +401,20 @@ Requires `DATABASE_URL` and is read-only.
 
 ## Fixture-Only DataOps Job
 
-The optional job command is:
+The optional Azure Container Apps Job command is:
 
 ```bash
-prediction-desk dataops-cycle --mode FIXTURE
+/app/scripts/run_fixture_dataops_job.sh
 ```
 
-It is fixture-only, does not set `--allow-network`, does not require venue credentials, and
-does not call trading endpoints. Enable it only after fixture smoke passes and backups are
-confirmed:
+The wrapper runs `prediction-desk dataops-cycle --mode FIXTURE` inside the container. Using
+a wrapper keeps `--mode FIXTURE` out of the Azure CLI argument parser when creating or
+updating the job. It is fixture-only, does not set `--allow-network`, does not require venue
+credentials, and does not call trading endpoints. Enable it only after fixture smoke passes
+and backups are confirmed:
+
+The helper mirrors the API Container App's ACR pull identity when creating the job; it does
+not ask for or print registry passwords.
 
 ```bash
 CONFIRM_ENABLE_FIXTURE_SCHEDULE=true \
@@ -422,6 +427,10 @@ Disable it with:
 ```bash
 CONFIRM_DISABLE_FIXTURE_SCHEDULE=true scripts/azure_disable_fixture_schedule.sh
 ```
+
+The default job name is `pd-fixture-dataops-job`, kept below Azure Container Apps Job's
+32-character name limit. Override `AZURE_FIXTURE_JOB_NAME` only if the replacement also
+fits Azure naming rules.
 
 ## Public-Read Pilot
 

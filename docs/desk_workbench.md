@@ -159,6 +159,11 @@ Use `GET /workbench/status`, `prediction-desk workbench-status`, or
 status counts, top reasons, hard/soft escalators, latest coverage/gaps, and the explicit
 `public_read_schedule_status` value. Public-read scheduling remains `HELD`.
 
+The optional Azure fixture schedule uses `/app/scripts/run_fixture_dataops_job.sh`, which
+runs `prediction-desk dataops-cycle --mode FIXTURE` inside the container. It does not run
+manual public fetch, does not pass `--allow-network`, and does not call the public-read
+pilot script.
+
 ## Decision Cards
 
 Decision cards are compact, evidence-backed snapshots. They include source reference IDs

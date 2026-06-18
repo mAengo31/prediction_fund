@@ -7,7 +7,7 @@ if [[ "${CONFIRM_DISABLE_FIXTURE_SCHEDULE:-}" != "true" ]]; then
 fi
 
 AZURE_RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-prediction-desk-staging-cus-rg}"
-AZURE_FIXTURE_JOB_NAME="${AZURE_FIXTURE_JOB_NAME:-prediction-desk-fixture-dataops-job}"
+AZURE_FIXTURE_JOB_NAME="${AZURE_FIXTURE_JOB_NAME:-pd-fixture-dataops-job}"
 
 az account show --query id -o tsv >/dev/null
 

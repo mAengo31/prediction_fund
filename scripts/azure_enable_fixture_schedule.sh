@@ -13,8 +13,9 @@ fi
 
 AZURE_RESOURCE_GROUP="${AZURE_RESOURCE_GROUP:-prediction-desk-staging-cus-rg}"
 AZURE_CONTAINER_APP_NAME="${AZURE_CONTAINER_APP_NAME:-prediction-desk-staging-api}"
-AZURE_FIXTURE_JOB_NAME="${AZURE_FIXTURE_JOB_NAME:-prediction-desk-fixture-dataops-job}"
+AZURE_FIXTURE_JOB_NAME="${AZURE_FIXTURE_JOB_NAME:-pd-fixture-dataops-job}"
 AZURE_FIXTURE_JOB_CRON="${AZURE_FIXTURE_JOB_CRON:-0 */12 * * *}"
+AZURE_FIXTURE_JOB_COMMAND="${AZURE_FIXTURE_JOB_COMMAND:-/app/scripts/run_fixture_dataops_job.sh}"
 
 az account show --query id -o tsv >/dev/null
 
@@ -27,6 +28,15 @@ IMAGE="$(python -c 'import json,sys; print(json.load(sys.stdin)["properties"]["t
 ENVIRONMENT_ID="$(python -c 'import json,sys; print(json.load(sys.stdin)["properties"]["environmentId"])' <<<"${APP_JSON}")"
 ENVIRONMENT_NAME="${AZURE_CONTAINER_APP_ENVIRONMENT:-${ENVIRONMENT_ID##*/}}"
 REGISTRY_SERVER="${AZURE_REGISTRY_SERVER:-${IMAGE%%/*}}"
+REGISTRY_IDENTITY="$(python -c 'import json,sys; registries=json.load(sys.stdin)["properties"]["configuration"].get("registries") or []; print((registries[0] or {}).get("identity") or "")' <<<"${APP_JSON}")"
+
+create_identity_args=()
+if [[ -n "${REGISTRY_IDENTITY}" ]]; then
+  create_identity_args=(
+    --mi-user-assigned "${REGISTRY_IDENTITY}"
+    --registry-identity "${REGISTRY_IDENTITY}"
+  )
+fi
 
 if az containerapp job show \
   --resource-group "${AZURE_RESOURCE_GROUP}" \
@@ -43,8 +53,7 @@ if az containerapp job show \
       ENABLE_OPENAPI_DOCS=false \
       DATABASE_URL=secretref:prediction-desk-database-url \
       LOG_LEVEL=INFO \
-    --command "prediction-desk" \
-    --args "dataops-cycle" "--mode" "FIXTURE"
+    --command "${AZURE_FIXTURE_JOB_COMMAND}"
 else
   az containerapp job create \
     --resource-group "${AZURE_RESOURCE_GROUP}" \
@@ -58,6 +67,7 @@ else
     --parallelism 1 \
     --image "${IMAGE}" \
     --registry-server "${REGISTRY_SERVER}" \
+    "${create_identity_args[@]}" \
     --secrets "prediction-desk-database-url=${DATABASE_URL}" \
     --env-vars \
       APP_ENV=staging \
@@ -65,8 +75,7 @@ else
       ENABLE_OPENAPI_DOCS=false \
       DATABASE_URL=secretref:prediction-desk-database-url \
       LOG_LEVEL=INFO \
-    --command "prediction-desk" \
-    --args "dataops-cycle" "--mode" "FIXTURE"
+    --command "${AZURE_FIXTURE_JOB_COMMAND}"
 fi
 
-echo "fixture_schedule ready: job=${AZURE_FIXTURE_JOB_NAME} cron='${AZURE_FIXTURE_JOB_CRON}' mode=FIXTURE public_read=held"
+echo "fixture_schedule ready: job=${AZURE_FIXTURE_JOB_NAME} cron='${AZURE_FIXTURE_JOB_CRON}' command=${AZURE_FIXTURE_JOB_COMMAND} mode=FIXTURE public_read=held"

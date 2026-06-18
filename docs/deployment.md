@@ -241,11 +241,16 @@ pilots. The pilot script sends no venue credentials and refuses to run unless
 [staging_deployment.md](staging_deployment.md), and
 [staging_dataops_pilot.md](staging_dataops_pilot.md) for the full operational runbooks.
 
-If a scheduled validation job is enabled later, use fixture mode only:
+If a scheduled validation job is enabled later, use fixture mode only. The container-side
+command is:
 
 ```bash
-prediction-desk dataops-cycle --mode FIXTURE
+/app/scripts/run_fixture_dataops_job.sh
 ```
+
+The wrapper runs `prediction-desk dataops-cycle --mode FIXTURE` inside the container. This
+avoids passing dashed application arguments such as `--mode` through `az containerapp job`
+argument parsing.
 
 Create or update the Azure fixture-only schedule only after explicit confirmation:
 
@@ -255,14 +260,17 @@ DATABASE_URL="postgresql+psycopg://..." \
 scripts/azure_enable_fixture_schedule.sh
 ```
 
+The default Azure job name is `pd-fixture-dataops-job`, kept under Azure Container Apps
+Job's 32-character name limit.
+
 Disable it with:
 
 ```bash
 CONFIRM_DISABLE_FIXTURE_SCHEDULE=true scripts/azure_disable_fixture_schedule.sh
 ```
 
-The helper does not schedule public-read collection, does not pass `--allow-network`, and
-does not require venue credentials.
+The helper does not schedule public-read collection, does not pass `--allow-network`, does
+not require venue credentials, and does not call the public-read pilot script.
 
 Do not schedule public-read collection during this staging phase.
 
