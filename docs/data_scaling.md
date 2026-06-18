@@ -134,6 +134,31 @@ follow-up can request `MARKET_DETAIL`, `ORDERBOOK`, and supported `PRICE_HISTORY
 for existing canonical market IDs/venue mappings. Unsupported endpoint/venue combinations
 are recorded as safe partial-run errors; the system does not fabricate historical data.
 
+Kalshi targeted follow-up uses the venue market mapping external market ticker. Polymarket
+targeted follow-up is token-aware: catalog/detail normalization persists Gamma market IDs,
+condition/question IDs, outcome labels, `enableOrderBook`, and CLOB token/asset IDs in
+`venue_outcome_token_mappings`. Polymarket `MARKET_DETAIL` resolves the Gamma market ID
+from mapping metadata; Polymarket `ORDERBOOK` and `PRICE_HISTORY` resolve token/asset IDs
+from the outcome-token mapping. If a Gamma ID or token ID is missing, the collection run
+records a safe missing-identifier error instead of guessing.
+
+Example token-aware Polymarket collection:
+
+```bash
+prediction-desk dataops-run-collection \
+  --venue polymarket \
+  --mode MANUAL_PUBLIC_FETCH \
+  --allow-network \
+  --endpoint-type MARKET_DETAIL \
+  --endpoint-type ORDERBOOK \
+  --endpoint-type PRICE_HISTORY \
+  --market-id polymarket_market_... \
+  --max-payloads 5
+```
+
+This is public-read only. It does not use authenticated CLOB endpoints, venue trading
+credentials, wallets, private keys, order routing, or execution authority.
+
 ## Scheduling
 
 V1 does not include a daemon. Run collection once from cron or deployment jobs:

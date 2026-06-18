@@ -214,6 +214,27 @@ canonical market IDs:
 }
 ```
 
+Polymarket targeted follow-up uses the same API shape, but the selected canonical market
+must already have token-aware venue metadata from catalog/detail ingestion:
+
+```json
+{
+  "mode": "MANUAL_PUBLIC_FETCH",
+  "allow_network": true,
+  "venue_names": ["polymarket"],
+  "market_ids": ["polymarket_market_..."],
+  "endpoint_types": ["MARKET_DETAIL", "ORDERBOOK", "PRICE_HISTORY"],
+  "max_payloads": 5,
+  "metadata": {"source": "manual_polymarket_token_aware_public_read"}
+}
+```
+
+Polymarket `MARKET_DETAIL` resolves a Gamma market ID from the venue mapping.
+Polymarket `ORDERBOOK` and `PRICE_HISTORY` resolve CLOB token/asset IDs from persisted
+outcome-token mappings. Missing Gamma IDs, missing token IDs, and disabled orderbooks are
+reported as safe partial-run errors. The API does not accept venue credentials and does
+not call authenticated CLOB trading endpoints.
+
 When endpoint types are omitted, the request remains a catalog/list pilot. Unsupported
 public-read endpoint combinations are returned as partial collection runs with clear
 metadata errors; unsupported historical data is not fabricated.

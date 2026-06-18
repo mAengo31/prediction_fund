@@ -1,0 +1,29 @@
+{
+  "endpoint_type": "ORDERBOOK",
+  "external_id": "0xabc123nyctemp",
+  "captured_at": "2026-06-16T12:06:00Z",
+  "source_url": "fixture://polymarket/clob/book",
+  "request_params": {
+    "token_id": "2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "response_payload": {
+    "market": "0xabc123nyctemp",
+    "condition_id": "0xabc123nyctemp",
+    "asset_id": "2222222222222222222222222222222222222222222222222222222222222222",
+    "bids": [
+      {
+        "price": "0.36",
+        "size": "80"
+      }
+    ],
+    "asks": [
+      {
+        "price": "0.39",
+        "size": "110"
+      }
+    ]
+  },
+  "metadata": {
+    "fixture_kind": "orderbook"
+  }
+}

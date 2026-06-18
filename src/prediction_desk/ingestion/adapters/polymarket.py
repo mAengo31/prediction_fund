@@ -54,12 +54,50 @@ class PolymarketReadOnlyAdapter(FixtureBackedAdapter):
         allow_network: bool = False,
         captured_at: datetime | None = None,
     ) -> RawVenuePayload:
+        return self.fetch_market_detail_by_gamma_id(
+            external_market_id,
+            allow_network=allow_network,
+            captured_at=captured_at,
+        )
+
+    def fetch_market_detail_by_gamma_id(
+        self,
+        gamma_market_id: str,
+        *,
+        allow_network: bool = False,
+        captured_at: datetime | None = None,
+    ) -> RawVenuePayload:
         if not allow_network:
-            return self._fixture_by_type_and_id(VenueEndpointType.MARKET_DETAIL, external_market_id)
+            return self._fixture_by_type_and_id(
+                VenueEndpointType.MARKET_DETAIL,
+                gamma_market_id,
+                captured_at=captured_at,
+            )
         return self._get(
-            source_url=f"{POLYMARKET_GAMMA_BASE_URL}/markets/{external_market_id}",
+            source_url=f"{POLYMARKET_GAMMA_BASE_URL}/markets/{gamma_market_id}",
             endpoint_type=VenueEndpointType.MARKET_DETAIL,
-            external_id=external_market_id,
+            external_id=gamma_market_id,
+            params={},
+            captured_at=captured_at,
+        )
+
+    def fetch_market_detail_by_slug(
+        self,
+        slug: str,
+        *,
+        allow_network: bool = False,
+        captured_at: datetime | None = None,
+    ) -> RawVenuePayload:
+        if not allow_network:
+            return self._fixture_by_type_and_id(
+                VenueEndpointType.MARKET_DETAIL,
+                slug,
+                captured_at=captured_at,
+            )
+        return self._get(
+            source_url=f"{POLYMARKET_GAMMA_BASE_URL}/markets/slug/{slug}",
+            endpoint_type=VenueEndpointType.MARKET_DETAIL,
+            external_id=slug,
             params={},
             captured_at=captured_at,
         )
@@ -71,13 +109,30 @@ class PolymarketReadOnlyAdapter(FixtureBackedAdapter):
         allow_network: bool = False,
         captured_at: datetime | None = None,
     ) -> RawVenuePayload:
+        return self.fetch_orderbook_by_token_id(
+            external_market_id,
+            allow_network=allow_network,
+            captured_at=captured_at,
+        )
+
+    def fetch_orderbook_by_token_id(
+        self,
+        token_id: str,
+        *,
+        allow_network: bool = False,
+        captured_at: datetime | None = None,
+    ) -> RawVenuePayload:
         if not allow_network:
-            return self._fixture_by_type_and_id(VenueEndpointType.ORDERBOOK, external_market_id)
+            return self._fixture_by_type_and_token_id(
+                VenueEndpointType.ORDERBOOK,
+                token_id,
+                captured_at=captured_at,
+            )
         return self._get(
             source_url=f"{POLYMARKET_CLOB_BASE_URL}/book",
             endpoint_type=VenueEndpointType.ORDERBOOK,
-            external_id=external_market_id,
-            params={"token_id": external_market_id},
+            external_id=token_id,
+            params={"token_id": token_id},
             captured_at=captured_at,
         )
 
@@ -88,13 +143,30 @@ class PolymarketReadOnlyAdapter(FixtureBackedAdapter):
         allow_network: bool = False,
         captured_at: datetime | None = None,
     ) -> RawVenuePayload:
+        return self.fetch_price_history_by_token_id(
+            external_market_id,
+            allow_network=allow_network,
+            captured_at=captured_at,
+        )
+
+    def fetch_price_history_by_token_id(
+        self,
+        token_id: str,
+        *,
+        allow_network: bool = False,
+        captured_at: datetime | None = None,
+    ) -> RawVenuePayload:
         if not allow_network:
-            return self._fixture_by_type_and_id(VenueEndpointType.PRICE_HISTORY, external_market_id)
+            return self._fixture_by_type_and_token_id(
+                VenueEndpointType.PRICE_HISTORY,
+                token_id,
+                captured_at=captured_at,
+            )
         return self._get(
             source_url=f"{POLYMARKET_CLOB_BASE_URL}/prices-history",
             endpoint_type=VenueEndpointType.PRICE_HISTORY,
-            external_id=external_market_id,
-            params={"market": external_market_id},
+            external_id=token_id,
+            params={"market": token_id},
             captured_at=captured_at,
         )
 
@@ -129,9 +201,55 @@ class PolymarketReadOnlyAdapter(FixtureBackedAdapter):
         )
 
     def _fixture_by_type_and_id(
-        self, endpoint_type: VenueEndpointType, external_market_id: str
+        self,
+        endpoint_type: VenueEndpointType,
+        external_market_id: str,
+        *,
+        captured_at: datetime | None = None,
     ) -> RawVenuePayload:
-        for payload in self.fixture_payloads():
-            if payload.endpoint_type == endpoint_type and payload.external_id == external_market_id:
+        for payload in self.fixture_payloads(captured_at):
+            if payload.endpoint_type != endpoint_type:
+                continue
+            if payload.external_id == external_market_id:
                 return payload
+            market_payload = payload.response_payload.get("market", payload.response_payload)
+            if isinstance(market_payload, dict):
+                identifiers = {
+                    market_payload.get("id"),
+                    market_payload.get("conditionId"),
+                    market_payload.get("condition_id"),
+                    market_payload.get("slug"),
+                    payload.request_params.get("id"),
+                }
+                if external_market_id in {str(item) for item in identifiers if item is not None}:
+                    return payload
         raise FileNotFoundError(f"No Polymarket fixture for {endpoint_type}:{external_market_id}")
+
+    def _fixture_by_type_and_token_id(
+        self,
+        endpoint_type: VenueEndpointType,
+        token_id: str,
+        *,
+        captured_at: datetime | None = None,
+    ) -> RawVenuePayload:
+        for payload in self.fixture_payloads(captured_at):
+            if payload.endpoint_type != endpoint_type:
+                continue
+            if payload.external_id == token_id:
+                return payload
+            identifiers = {
+                payload.request_params.get("token_id"),
+                payload.request_params.get("market"),
+                payload.response_payload.get("asset_id"),
+                payload.response_payload.get("token_id"),
+                payload.response_payload.get("market"),
+            }
+            history = payload.response_payload.get("history")
+            if isinstance(history, list):
+                for point in history:
+                    if isinstance(point, dict):
+                        identifiers.add(point.get("token_id"))
+                        identifiers.add(point.get("asset_id"))
+            if token_id in {str(item) for item in identifiers if item is not None}:
+                return payload
+        raise FileNotFoundError(f"No Polymarket fixture for {endpoint_type}:{token_id}")

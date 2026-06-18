@@ -24,6 +24,8 @@ from prediction_desk.ingestion.enums import (
     IngestionSource,
     VenueEndpointType,
     VenueMappingStatus,
+    VenueOutcomeTokenSide,
+    VenueOutcomeTokenStatus,
 )
 from prediction_desk.marketdata.models import MarketPriceSnapshot
 
@@ -124,6 +126,29 @@ class VenueMarketMapping(IngestionModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class VenueOutcomeTokenMapping(IngestionModel):
+    mapping_id: str
+    venue_id: str
+    venue_name: str
+    canonical_market_id: str
+    canonical_outcome_id: str | None = None
+    outcome_label: str
+    external_market_id: str | None = None
+    condition_id: str | None = None
+    question_id: str | None = None
+    gamma_market_id: str | None = None
+    gamma_event_id: str | None = None
+    market_address: str | None = None
+    token_id: str | None = None
+    asset_id: str | None = None
+    token_side: VenueOutcomeTokenSide
+    enable_orderbook: bool | None = None
+    first_seen_at: datetime
+    last_seen_at: datetime
+    status: VenueOutcomeTokenStatus
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class IngestionRun(IngestionModel):
     ingestion_run_id: str
     venue_id: str
@@ -169,6 +194,7 @@ class NormalizedVenuePayload(IngestionModel):
     orderbook_snapshot: OrderBookSnapshot | None = None
     price_snapshots: list[MarketPriceSnapshot] = Field(default_factory=list)
     mapping: VenueMarketMapping | None = None
+    outcome_token_mappings: list[VenueOutcomeTokenMapping] = Field(default_factory=list)
 
 
 class IngestionRunResult(IngestionModel):

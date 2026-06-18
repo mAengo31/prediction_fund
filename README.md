@@ -309,6 +309,21 @@ prediction-desk dataops-run-collection \
   --max-payloads 5
 ```
 
+Polymarket targeted follow-up is token-aware. It requires prior catalog/detail ingestion
+that persisted Gamma and CLOB token identifiers:
+
+```bash
+prediction-desk dataops-run-collection \
+  --venue polymarket \
+  --mode MANUAL_PUBLIC_FETCH \
+  --allow-network \
+  --endpoint-type MARKET_DETAIL \
+  --endpoint-type ORDERBOOK \
+  --endpoint-type PRICE_HISTORY \
+  --market-id polymarket_market_... \
+  --max-payloads 5
+```
+
 Public-read collection remains manual and unscheduled. No venue credentials are accepted.
 
 Use a custom database URL:

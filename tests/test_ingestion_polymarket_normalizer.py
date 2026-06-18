@@ -39,9 +39,38 @@ def test_polymarket_normalizer_preserves_token_and_condition_ids() -> None:
     assert normalized.market is not None
     assert normalized.mapping is not None
     assert normalized.market.metadata["condition_id"] == "0xabc123nyctemp"
+    assert normalized.market.metadata["gamma_market_id"] == "pm-nyc-temp-20260704"
+    assert normalized.market.metadata["enable_orderbook"] is True
     assert normalized.market.metadata["token_ids"][0].startswith("111111")
     assert normalized.outcomes[0].metadata["token_id"].startswith("111111")
+    assert normalized.outcomes[0].metadata["token_side"] == "YES"
     assert normalized.mapping.external_symbol == "0xabc123nyctemp"
+    assert normalized.mapping.metadata["gamma_market_id"] == "pm-nyc-temp-20260704"
+    assert len(normalized.outcome_token_mappings) == 2
+    assert normalized.outcome_token_mappings[0].gamma_market_id == "pm-nyc-temp-20260704"
+    assert normalized.outcome_token_mappings[0].token_side.value == "YES"
+    assert normalized.outcome_token_mappings[0].status.value == "ACTIVE"
+    assert normalized.outcome_token_mappings[0].enable_orderbook is True
+
+
+def test_polymarket_orderbook_can_use_token_targeting_metadata() -> None:
+    payload = _payload("orderbook_weather.json")
+    token_payload = payload.model_copy(
+        update={
+            "external_id": "1111111111111111111111111111111111111111111111111111111111111111",
+            "metadata": {
+                **payload.metadata,
+                "canonical_market_id": "polymarket_market_0xabc123nyctemp",
+                "condition_id": "0xabc123nyctemp",
+                "token_id": "1111111111111111111111111111111111111111111111111111111111111111",
+            },
+        }
+    )
+    [normalized] = normalize_polymarket_payload(token_payload)
+
+    assert normalized.orderbook_snapshot is not None
+    assert normalized.orderbook_snapshot.market_id == "polymarket_market_0xabc123nyctemp"
+    assert normalized.orderbook_snapshot.metadata["token_id"].startswith("111111")
 
 
 def test_polymarket_price_history_fixture_maps_into_price_snapshot() -> None:

@@ -16,6 +16,7 @@ TABLES: tuple[str, ...] = (
     "events",
     "markets",
     "outcomes",
+    "venue_outcome_token_mappings",
     "raw_venue_payloads",
     "market_rule_snapshots",
     "resolution_predicates",

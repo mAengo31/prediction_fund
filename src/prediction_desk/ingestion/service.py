@@ -15,6 +15,7 @@ from prediction_desk.ingestion.enums import (
     IngestionRunStatus,
     IngestionSource,
     VenueEndpointType,
+    VenueOutcomeTokenStatus,
 )
 from prediction_desk.ingestion.fixtures import default_fixture_root
 from prediction_desk.ingestion.models import (
@@ -24,6 +25,7 @@ from prediction_desk.ingestion.models import (
     NormalizedVenuePayload,
     RawVenuePayload,
     VenueMarketMapping,
+    VenueOutcomeTokenMapping,
 )
 from prediction_desk.ingestion.normalizers.kalshi import normalize_kalshi_payload
 from prediction_desk.ingestion.normalizers.polymarket import normalize_polymarket_payload
@@ -413,6 +415,20 @@ def _collect_public_payloads(
             )
             continue
 
+        if isinstance(adapter, PolymarketReadOnlyAdapter):
+            fetched, endpoint_errors = _collect_polymarket_targeted_payloads(
+                repo=repo,
+                adapter=adapter,
+                endpoint_type=endpoint_type,
+                mappings=mappings_cache,
+                remaining=remaining,
+                allow_network=allow_network,
+            )
+            payloads.extend(fetched)
+            errors.extend(endpoint_errors)
+            remaining -= min(len(fetched), remaining)
+            continue
+
         for mapping in mappings_cache:
             if remaining <= 0:
                 break
@@ -553,7 +569,7 @@ def _targeted_endpoint_supported(
     if endpoint_type == VenueEndpointType.MARKET_DETAIL:
         return True
     if endpoint_type == VenueEndpointType.ORDERBOOK:
-        return adapter.venue_id == "kalshi"
+        return adapter.venue_id in {"kalshi", "polymarket"}
     if endpoint_type == VenueEndpointType.PRICE_HISTORY:
         return adapter.venue_id == "polymarket"
     return endpoint_type == VenueEndpointType.MARKET_LIST
@@ -603,6 +619,199 @@ def _fetch_targeted_payload(
     raise IngestionServiceError("unsupported_public_endpoint")
 
 
+def _collect_polymarket_targeted_payloads(
+    *,
+    repo: PredictionMarketRepository,
+    adapter: PolymarketReadOnlyAdapter,
+    endpoint_type: VenueEndpointType,
+    mappings: list[VenueMarketMapping],
+    remaining: int,
+    allow_network: bool,
+) -> tuple[list[RawVenuePayload], list[dict[str, str | None]]]:
+    payloads: list[RawVenuePayload] = []
+    errors: list[dict[str, str | None]] = []
+    for mapping in mappings:
+        if remaining <= 0:
+            break
+        if endpoint_type == VenueEndpointType.MARKET_DETAIL:
+            identifier = _polymarket_gamma_identifier(mapping)
+            if identifier is None:
+                errors.append(
+                    _pre_error(
+                        code="POLYMARKET_MISSING_GAMMA_MARKET_ID",
+                        endpoint_type=endpoint_type,
+                        external_id=mapping.external_market_id,
+                        message=(
+                            "Polymarket market detail follow-up requires a Gamma market "
+                            "identifier from prior catalog/detail ingestion."
+                        ),
+                    )
+                )
+                continue
+            try:
+                payload = adapter.fetch_market_detail_by_gamma_id(
+                    identifier,
+                    allow_network=allow_network,
+                )
+            except Exception as exc:
+                errors.append(
+                    _fetch_error(
+                        code="public_fetch_failed",
+                        endpoint_type=endpoint_type,
+                        external_id=identifier,
+                        exc=exc,
+                    )
+                )
+                continue
+            payloads.append(_with_polymarket_mapping_metadata(payload, mapping, None))
+            remaining -= 1
+            continue
+
+        token_mappings = repo.list_venue_outcome_token_mappings(
+            venue_name=mapping.venue_name,
+            canonical_market_id=mapping.canonical_market_id,
+            status=VenueOutcomeTokenStatus.ACTIVE,
+            limit=20,
+        )
+        token_mappings = sorted(
+            token_mappings,
+            key=lambda item: (
+                _polymarket_token_side_order(item.token_side.value),
+                item.token_id or item.asset_id or "",
+            ),
+        )
+        if not token_mappings:
+            errors.append(
+                _pre_error(
+                    code="POLYMARKET_MISSING_TOKEN_ID",
+                    endpoint_type=endpoint_type,
+                    external_id=mapping.external_market_id,
+                    message=(
+                        "Polymarket CLOB follow-up requires token IDs from prior "
+                        "catalog/detail ingestion."
+                    ),
+                )
+            )
+            continue
+
+        for token_mapping in token_mappings:
+            if remaining <= 0:
+                break
+            token_id = token_mapping.token_id or token_mapping.asset_id
+            if not token_id:
+                errors.append(
+                    _pre_error(
+                        code="POLYMARKET_MISSING_TOKEN_ID",
+                        endpoint_type=endpoint_type,
+                        external_id=mapping.external_market_id,
+                        message="Polymarket token mapping is active but has no token_id/asset_id.",
+                    )
+                )
+                continue
+            if (
+                endpoint_type == VenueEndpointType.ORDERBOOK
+                and token_mapping.enable_orderbook is False
+            ):
+                errors.append(
+                    _pre_error(
+                        code="POLYMARKET_ORDERBOOK_DISABLED",
+                        endpoint_type=endpoint_type,
+                        external_id=token_id,
+                        message="Polymarket market reports enableOrderBook=false.",
+                    )
+                )
+                continue
+            try:
+                if endpoint_type == VenueEndpointType.ORDERBOOK:
+                    payload = adapter.fetch_orderbook_by_token_id(
+                        token_id,
+                        allow_network=allow_network,
+                    )
+                elif endpoint_type == VenueEndpointType.PRICE_HISTORY:
+                    payload = adapter.fetch_price_history_by_token_id(
+                        token_id,
+                        allow_network=allow_network,
+                    )
+                else:
+                    raise IngestionServiceError("unsupported_public_endpoint")
+            except Exception as exc:
+                errors.append(
+                    _fetch_error(
+                        code="public_fetch_failed",
+                        endpoint_type=endpoint_type,
+                        external_id=token_id,
+                        exc=exc,
+                    )
+                )
+                continue
+            payloads.append(_with_polymarket_mapping_metadata(payload, mapping, token_mapping))
+            remaining -= 1
+    return payloads, errors
+
+
+def _polymarket_gamma_identifier(mapping: VenueMarketMapping) -> str | None:
+    metadata = mapping.metadata
+    for key in ("gamma_market_id", "gamma_id", "market_id"):
+        value = metadata.get(key)
+        if value:
+            return str(value)
+    # Existing pre-token-aware mappings often used the Gamma id as external_market_id.
+    external_market_id = mapping.external_market_id
+    if external_market_id and not external_market_id.startswith("0x"):
+        return external_market_id
+    return None
+
+
+def _polymarket_token_side_order(side: str) -> int:
+    return {"YES": 0, "NO": 1}.get(side, 2)
+
+
+def _with_polymarket_mapping_metadata(
+    payload: RawVenuePayload,
+    mapping: VenueMarketMapping,
+    token_mapping: VenueOutcomeTokenMapping | None,
+) -> RawVenuePayload:
+    metadata = {
+        **payload.metadata,
+        "canonical_market_id": mapping.canonical_market_id,
+        "canonical_event_id": mapping.canonical_event_id,
+        "external_market_id": mapping.external_market_id,
+        "condition_id": mapping.metadata.get("condition_id") or mapping.external_symbol,
+        "question_id": mapping.metadata.get("question_id"),
+        "gamma_market_id": mapping.metadata.get("gamma_market_id"),
+        "gamma_event_id": mapping.metadata.get("gamma_event_id"),
+        "mapping_id": mapping.mapping_id,
+    }
+    if token_mapping is not None:
+        metadata.update(
+            {
+                "token_mapping_id": token_mapping.mapping_id,
+                "canonical_outcome_id": token_mapping.canonical_outcome_id,
+                "outcome_label": token_mapping.outcome_label,
+                "token_id": token_mapping.token_id,
+                "asset_id": token_mapping.asset_id,
+                "token_side": token_mapping.token_side.value,
+                "enable_orderbook": token_mapping.enable_orderbook,
+            }
+        )
+    return payload.model_copy(update={"metadata": metadata})
+
+
+def _pre_error(
+    *,
+    code: str,
+    endpoint_type: VenueEndpointType,
+    external_id: str | None,
+    message: str,
+) -> dict[str, str | None]:
+    return {
+        "code": code,
+        "endpoint_type": endpoint_type.value,
+        "external_id": external_id,
+        "message": message,
+    }
+
+
 def _fetch_error(
     *,
     code: str,
@@ -643,6 +852,8 @@ def _upsert_normalized(
         repo.upsert_outcome(outcome)
     if normalized.mapping is not None:
         repo.upsert_venue_market_mapping(normalized.mapping)
+    for token_mapping in normalized.outcome_token_mappings:
+        repo.upsert_venue_outcome_token_mapping(token_mapping)
 
     rule_snapshot = _save_rule_snapshot_if_changed(repo, normalized.rule_snapshot)
     if rule_snapshot is not None:

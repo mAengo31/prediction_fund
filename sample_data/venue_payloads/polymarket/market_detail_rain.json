@@ -11,6 +11,8 @@
       "id": "0xrainnycsep2026",
       "conditionId": "0xrainnycsep2026",
       "questionID": "rainnycsep2026",
+      "enableOrderBook": true,
+      "marketMakerAddress": "0x0000000000000000000000000000000000000002",
       "slug": "nyc-rain-september-2026",
       "eventTitle": "NYC rainfall September 2026",
       "question": "Will NYC record at least 1 inch of rain by September 30, 2026?",

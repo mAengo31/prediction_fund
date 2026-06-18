@@ -26,6 +26,19 @@ class VenueMappingStatus(StrEnum):
     IGNORED = "IGNORED"
 
 
+class VenueOutcomeTokenSide(StrEnum):
+    YES = "YES"
+    NO = "NO"
+    OTHER = "OTHER"
+
+
+class VenueOutcomeTokenStatus(StrEnum):
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+    MISSING_TOKEN = "MISSING_TOKEN"
+    UNSUPPORTED = "UNSUPPORTED"
+
+
 class IngestionRunStatus(StrEnum):
     RUNNING = "RUNNING"
     COMPLETED = "COMPLETED"

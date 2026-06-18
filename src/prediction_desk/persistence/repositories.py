@@ -84,6 +84,8 @@ from prediction_desk.ingestion.enums import (
     IngestionSource,
     VenueEndpointType,
     VenueMappingStatus,
+    VenueOutcomeTokenSide,
+    VenueOutcomeTokenStatus,
 )
 from prediction_desk.ingestion.models import (
     IngestionCursor,
@@ -91,6 +93,7 @@ from prediction_desk.ingestion.models import (
     IngestionRun,
     RawVenuePayload,
     VenueMarketMapping,
+    VenueOutcomeTokenMapping,
 )
 from prediction_desk.integrity.enums import (
     IntegrityActionHint,
@@ -207,6 +210,7 @@ from prediction_desk.persistence.orm import (
     TradePrintRecord,
     TrustVerdictRecord,
     VenueMarketMappingRecord,
+    VenueOutcomeTokenMappingRecord,
     VenueRecord,
 )
 from prediction_desk.pretrade.enums import (
@@ -850,6 +854,86 @@ class PredictionMarketRepository:
             stmt = stmt.where(VenueMarketMappingRecord.external_market_id == external_market_id)
         return [
             _venue_market_mapping_from_record(record) for record in self.session.scalars(stmt)
+        ]
+
+    def upsert_venue_outcome_token_mapping(
+        self, mapping: VenueOutcomeTokenMapping
+    ) -> VenueOutcomeTokenMapping:
+        existing = self.session.get(VenueOutcomeTokenMappingRecord, mapping.mapping_id)
+        if existing is not None:
+            existing.venue_id = mapping.venue_id
+            existing.venue_name = mapping.venue_name
+            existing.canonical_market_id = mapping.canonical_market_id
+            existing.canonical_outcome_id = mapping.canonical_outcome_id
+            existing.outcome_label = mapping.outcome_label
+            existing.external_market_id = mapping.external_market_id
+            existing.condition_id = mapping.condition_id
+            existing.question_id = mapping.question_id
+            existing.gamma_market_id = mapping.gamma_market_id
+            existing.gamma_event_id = mapping.gamma_event_id
+            existing.market_address = mapping.market_address
+            existing.token_id = mapping.token_id
+            existing.asset_id = mapping.asset_id
+            existing.token_side = mapping.token_side.value
+            existing.enable_orderbook = mapping.enable_orderbook
+            existing.last_seen_at = mapping.last_seen_at
+            existing.status = mapping.status.value
+            existing.metadata_json = _metadata(mapping.metadata)
+            self.session.flush()
+            return _venue_outcome_token_mapping_from_record(existing)
+        self.session.merge(_venue_outcome_token_mapping_to_record(mapping))
+        self.session.flush()
+        return mapping
+
+    def get_venue_outcome_token_mapping(
+        self, mapping_id: str
+    ) -> VenueOutcomeTokenMapping | None:
+        record = self.session.get(VenueOutcomeTokenMappingRecord, mapping_id)
+        return _venue_outcome_token_mapping_from_record(record) if record else None
+
+    def list_venue_outcome_token_mappings(
+        self,
+        *,
+        venue_name: str | None = None,
+        canonical_market_id: str | None = None,
+        token_id: str | None = None,
+        status: VenueOutcomeTokenStatus | str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[VenueOutcomeTokenMapping]:
+        stmt = (
+            select(VenueOutcomeTokenMappingRecord)
+            .order_by(
+                VenueOutcomeTokenMappingRecord.venue_name,
+                VenueOutcomeTokenMappingRecord.canonical_market_id,
+                VenueOutcomeTokenMappingRecord.token_side,
+                VenueOutcomeTokenMappingRecord.token_id,
+                VenueOutcomeTokenMappingRecord.mapping_id,
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        if venue_name is not None:
+            stmt = stmt.where(VenueOutcomeTokenMappingRecord.venue_name == venue_name)
+        if canonical_market_id is not None:
+            stmt = stmt.where(
+                VenueOutcomeTokenMappingRecord.canonical_market_id == canonical_market_id
+            )
+        if token_id is not None:
+            stmt = stmt.where(
+                or_(
+                    VenueOutcomeTokenMappingRecord.token_id == token_id,
+                    VenueOutcomeTokenMappingRecord.asset_id == token_id,
+                )
+            )
+        if status is not None:
+            status_value = (
+                status.value if isinstance(status, VenueOutcomeTokenStatus) else str(status)
+            )
+            stmt = stmt.where(VenueOutcomeTokenMappingRecord.status == status_value)
+        return [
+            _venue_outcome_token_mapping_from_record(record)
+            for record in self.session.scalars(stmt)
         ]
 
     def save_ingestion_run(self, run: IngestionRun) -> IngestionRun:
@@ -4234,6 +4318,60 @@ def _venue_market_mapping_from_record(
         first_seen_at=record.first_seen_at,
         last_seen_at=record.last_seen_at,
         status=VenueMappingStatus(record.status),
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _venue_outcome_token_mapping_to_record(
+    mapping: VenueOutcomeTokenMapping,
+) -> VenueOutcomeTokenMappingRecord:
+    return VenueOutcomeTokenMappingRecord(
+        mapping_id=mapping.mapping_id,
+        venue_id=mapping.venue_id,
+        venue_name=mapping.venue_name,
+        canonical_market_id=mapping.canonical_market_id,
+        canonical_outcome_id=mapping.canonical_outcome_id,
+        outcome_label=mapping.outcome_label,
+        external_market_id=mapping.external_market_id,
+        condition_id=mapping.condition_id,
+        question_id=mapping.question_id,
+        gamma_market_id=mapping.gamma_market_id,
+        gamma_event_id=mapping.gamma_event_id,
+        market_address=mapping.market_address,
+        token_id=mapping.token_id,
+        asset_id=mapping.asset_id,
+        token_side=mapping.token_side.value,
+        enable_orderbook=mapping.enable_orderbook,
+        first_seen_at=mapping.first_seen_at,
+        last_seen_at=mapping.last_seen_at,
+        status=mapping.status.value,
+        metadata_json=_metadata(mapping.metadata),
+    )
+
+
+def _venue_outcome_token_mapping_from_record(
+    record: VenueOutcomeTokenMappingRecord,
+) -> VenueOutcomeTokenMapping:
+    return VenueOutcomeTokenMapping(
+        mapping_id=record.mapping_id,
+        venue_id=record.venue_id,
+        venue_name=record.venue_name,
+        canonical_market_id=record.canonical_market_id,
+        canonical_outcome_id=record.canonical_outcome_id,
+        outcome_label=record.outcome_label,
+        external_market_id=record.external_market_id,
+        condition_id=record.condition_id,
+        question_id=record.question_id,
+        gamma_market_id=record.gamma_market_id,
+        gamma_event_id=record.gamma_event_id,
+        market_address=record.market_address,
+        token_id=record.token_id,
+        asset_id=record.asset_id,
+        token_side=VenueOutcomeTokenSide(record.token_side),
+        enable_orderbook=record.enable_orderbook,
+        first_seen_at=record.first_seen_at,
+        last_seen_at=record.last_seen_at,
+        status=VenueOutcomeTokenStatus(record.status),
         metadata=_metadata(record.metadata_json),
     )
 

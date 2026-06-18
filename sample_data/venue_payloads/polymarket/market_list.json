@@ -12,6 +12,8 @@
         "id": "pm-nyc-temp-20260704",
         "conditionId": "0xabc123nyctemp",
         "questionID": "0xquestion123",
+        "enableOrderBook": true,
+        "marketMakerAddress": "0x0000000000000000000000000000000000000001",
         "question": "Will NYC reach 90 degrees on July 4, 2026?",
         "description": "This market resolves according to the official National Weather Service high temperature for Central Park.",
         "eventTitle": "NYC July 4 weather",

@@ -133,6 +133,34 @@ prices `8 / 8`, and liquidity `8 / 8`. Rule snapshot coverage remains `3 / 8`; t
 detail payload again exposed empty rule fields, so the rule gaps remain valid. Treat this
 as a successful manual validation result, not approval to schedule public-read collection.
 
+A matching Polymarket check using `MARKET_DETAIL,ORDERBOOK` for the two current
+Polymarket markets completed as `PARTIAL` with 0 archived payloads. The current
+fixture-style external market IDs returned `422` from Polymarket Gamma detail, and
+targeted Polymarket `ORDERBOOK` is explicitly unsupported in DataOps v1 because the CLOB
+book endpoint needs token-level identifiers. Do not repeat this exact shape expecting
+coverage changes; add a token-aware read-only mapping first if Polymarket orderbook
+coverage needs public follow-up.
+
+Token-aware Polymarket follow-up is the next fixture-backed path. It stores Gamma market
+IDs, condition/question IDs, outcome labels, `enableOrderBook`, and YES/NO CLOB
+token/asset IDs in a first-class mapping table. After deploying that code and running
+migrations, use only a tiny manual pilot:
+
+```bash
+API_BASE_URL="https://your-staging-api.example.com" \
+PREDICTION_DESK_API_TOKEN="..." \
+CONFIRM_PUBLIC_READ_ONLY=true \
+PUBLIC_READ_VENUES=polymarket \
+PUBLIC_READ_ENDPOINT_TYPES=MARKET_DETAIL,ORDERBOOK,PRICE_HISTORY \
+PUBLIC_READ_MARKET_IDS=polymarket_market_... \
+MAX_PAYLOADS=5 \
+scripts/staging_public_read_pilot.sh
+```
+
+If the selected Polymarket market has no persisted Gamma ID or token mappings, the
+collection run should remain `PARTIAL` with a safe missing-identifier error. Do not
+fabricate token IDs or orderbook data, and do not schedule public-read collection.
+
 If public fetch is unsupported or unavailable, keep fixture staging as the validated path
 and record the failure mode in validation notes.
 

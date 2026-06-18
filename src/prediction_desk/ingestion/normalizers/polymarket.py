@@ -18,11 +18,17 @@ from prediction_desk.domain.models import (
     PriceLevel,
     Venue,
 )
-from prediction_desk.ingestion.enums import VenueEndpointType, VenueMappingStatus
+from prediction_desk.ingestion.enums import (
+    VenueEndpointType,
+    VenueMappingStatus,
+    VenueOutcomeTokenSide,
+    VenueOutcomeTokenStatus,
+)
 from prediction_desk.ingestion.models import (
     NormalizedVenuePayload,
     RawVenuePayload,
     VenueMarketMapping,
+    VenueOutcomeTokenMapping,
 )
 from prediction_desk.marketdata.enums import MarketPriceSource
 from prediction_desk.marketdata.models import MarketPriceSnapshot, compute_market_price_hash
@@ -60,9 +66,24 @@ def _normalize_market_payload(
     question_id = _optional_str(
         market_payload.get("questionID") or market_payload.get("question_id")
     )
-    event_external_id = _optional_str(
+    gamma_market_id = _optional_str(
+        market_payload.get("id") or market_payload.get("gamma_market_id")
+    )
+    gamma_event_id = _optional_str(
         market_payload.get("eventId")
         or market_payload.get("event_id")
+        or market_payload.get("gamma_event_id")
+    )
+    market_address = _optional_str(
+        market_payload.get("marketMakerAddress")
+        or market_payload.get("market_address")
+        or market_payload.get("marketAddress")
+    )
+    enable_orderbook = _optional_bool(
+        _first_present(market_payload, "enableOrderBook", "enable_orderbook")
+    )
+    event_external_id = _optional_str(
+        gamma_event_id
         or market_payload.get("slug")
     )
     market_id = _market_id(condition_id or external_market_id)
@@ -98,7 +119,10 @@ def _normalize_market_payload(
                 "venue": "polymarket",
                 "condition_id": condition_id,
                 "question_id": question_id,
+                "gamma_market_id": gamma_market_id,
+                "gamma_event_id": gamma_event_id,
                 "token_ids": token_ids,
+                "enable_orderbook": enable_orderbook,
                 "source_payload_id": raw_payload.payload_id,
             },
         )
@@ -127,7 +151,10 @@ def _normalize_market_payload(
             end_time=_parse_datetime(
                 market_payload.get("endDate") or market_payload.get("end_date")
             ),
-            metadata={"external_event_id": event_external_id},
+            metadata={
+                "external_event_id": event_external_id,
+                "gamma_event_id": gamma_event_id,
+            },
         ),
         market=Market(
             market_id=market_id,
@@ -155,6 +182,10 @@ def _normalize_market_payload(
                 "external_market_id": external_market_id,
                 "condition_id": condition_id,
                 "question_id": question_id,
+                "gamma_market_id": gamma_market_id,
+                "gamma_event_id": gamma_event_id,
+                "market_address": market_address,
+                "enable_orderbook": enable_orderbook,
                 "token_ids": token_ids,
                 "source_payload_id": raw_payload.payload_id,
             },
@@ -168,6 +199,8 @@ def _normalize_market_payload(
                 metadata={
                     "venue": "polymarket",
                     "token_id": token_ids[index] if index < len(token_ids) else None,
+                    "asset_id": token_ids[index] if index < len(token_ids) else None,
+                    "token_side": _token_side(label).value,
                 },
             )
             for index, label in enumerate(outcome_labels)
@@ -184,26 +217,55 @@ def _normalize_market_payload(
             metadata={
                 "condition_id": condition_id,
                 "question_id": question_id,
+                "gamma_market_id": gamma_market_id,
+                "gamma_event_id": gamma_event_id,
+                "market_address": market_address,
+                "enable_orderbook": enable_orderbook,
                 "token_ids": token_ids,
+                "outcome_labels": outcome_labels,
             },
+        ),
+        outcome_token_mappings=_outcome_token_mappings(
+            raw_payload=raw_payload,
+            market_id=market_id,
+            outcome_labels=outcome_labels,
+            token_ids=token_ids,
+            external_market_id=external_market_id,
+            condition_id=condition_id,
+            question_id=question_id,
+            gamma_market_id=gamma_market_id,
+            gamma_event_id=gamma_event_id,
+            market_address=market_address,
+            enable_orderbook=enable_orderbook,
         ),
     )
 
 
 def _normalize_orderbook_payload(raw_payload: RawVenuePayload) -> NormalizedVenuePayload:
     body = raw_payload.response_payload
-    condition_id = _optional_str(body.get("condition_id") or body.get("conditionId"))
+    metadata = raw_payload.metadata
+    condition_id = _optional_str(
+        metadata.get("condition_id") or body.get("condition_id") or body.get("conditionId")
+    )
+    token_id = _optional_str(
+        metadata.get("token_id")
+        or metadata.get("asset_id")
+        or body.get("asset_id")
+        or body.get("token_id")
+        or raw_payload.request_params.get("token_id")
+    )
     external_market_id = str(
         condition_id
+        or metadata.get("external_market_id")
         or body.get("market")
         or body.get("market_id")
-        or body.get("asset_id")
+        or token_id
         or raw_payload.external_id
         or ""
     ).strip()
     if not external_market_id:
         raise ValueError("Polymarket orderbook payload is missing market identifier.")
-    market_id = _market_id(external_market_id)
+    market_id = _optional_str(metadata.get("canonical_market_id")) or _market_id(external_market_id)
     bids = [
         PriceLevel(price=_price(price), quantity=_decimal(size))
         for price, size in _levels(body.get("bids", []))
@@ -216,10 +278,12 @@ def _normalize_orderbook_payload(raw_payload: RawVenuePayload) -> NormalizedVenu
     ]
     bids.sort(key=lambda level: level.price, reverse=True)
     asks.sort(key=lambda level: level.price)
-    token_id = _optional_str(body.get("asset_id") or body.get("token_id"))
     return NormalizedVenuePayload(
         orderbook_snapshot=OrderBookSnapshot(
-            snapshot_id=f"ob_polymarket_{_slug(external_market_id)}_{raw_payload.response_hash[:16]}",
+            snapshot_id=(
+                f"ob_polymarket_{_slug(external_market_id)}_"
+                f"{_slug(token_id or 'unknown')}_{raw_payload.response_hash[:16]}"
+            ),
             market_id=market_id,
             captured_at=raw_payload.captured_at,
             bids=bids,
@@ -228,6 +292,7 @@ def _normalize_orderbook_payload(raw_payload: RawVenuePayload) -> NormalizedVenu
                 "venue": "polymarket",
                 "condition_id": condition_id,
                 "token_id": token_id,
+                "asset_id": token_id,
                 "source_payload_id": raw_payload.payload_id,
                 "bids_raw": body.get("bids", []),
                 "asks_raw": body.get("asks", []),
@@ -248,12 +313,17 @@ def _normalize_orderbook_payload(raw_payload: RawVenuePayload) -> NormalizedVenu
 
 def _normalize_price_history_payload(raw_payload: RawVenuePayload) -> NormalizedVenuePayload:
     body = raw_payload.response_payload
+    metadata = raw_payload.metadata
     external_market_id = _optional_str(
-        raw_payload.external_id or raw_payload.request_params.get("market") or body.get("market")
+        metadata.get("condition_id")
+        or metadata.get("external_market_id")
+        or raw_payload.external_id
+        or raw_payload.request_params.get("market")
+        or body.get("market")
     )
     if not external_market_id:
         raise ValueError("Polymarket price history payload is missing market identifier.")
-    market_id = _market_id(external_market_id)
+    market_id = _optional_str(metadata.get("canonical_market_id")) or _market_id(external_market_id)
     history = body.get("history", [])
     if not isinstance(history, list):
         return NormalizedVenuePayload()
@@ -288,9 +358,17 @@ def _normalize_price_history_payload(raw_payload: RawVenuePayload) -> Normalized
             source_payload_id=raw_payload.payload_id,
             orderbook_snapshot_id=None,
             external_market_id=external_market_id,
-            external_outcome_id=_optional_str(point.get("token_id") or point.get("asset_id")),
+            external_outcome_id=_optional_str(
+                point.get("token_id")
+                or point.get("asset_id")
+                or metadata.get("token_id")
+                or metadata.get("asset_id")
+            ),
             data_hash="pending",
-            metadata={"raw_point": point},
+            metadata={
+                "raw_point": point,
+                "token_id": _optional_str(metadata.get("token_id") or metadata.get("asset_id")),
+            },
         )
         data_hash = compute_market_price_hash(snapshot)
         snapshots.append(
@@ -343,6 +421,61 @@ def _mapping(
         status=VenueMappingStatus.ACTIVE,
         metadata={"source_payload_id": raw_payload.payload_id, **metadata},
     )
+
+
+def _outcome_token_mappings(
+    *,
+    raw_payload: RawVenuePayload,
+    market_id: str,
+    outcome_labels: list[str],
+    token_ids: list[str],
+    external_market_id: str,
+    condition_id: str | None,
+    question_id: str | None,
+    gamma_market_id: str | None,
+    gamma_event_id: str | None,
+    market_address: str | None,
+    enable_orderbook: bool | None,
+) -> list[VenueOutcomeTokenMapping]:
+    mappings: list[VenueOutcomeTokenMapping] = []
+    for index, label in enumerate(outcome_labels):
+        token_id = token_ids[index] if index < len(token_ids) else None
+        side = _token_side(label)
+        status = (
+            VenueOutcomeTokenStatus.ACTIVE
+            if token_id
+            else VenueOutcomeTokenStatus.MISSING_TOKEN
+        )
+        mapping_key = token_id or f"{condition_id or external_market_id}_{side.value}_{index}"
+        mappings.append(
+            VenueOutcomeTokenMapping(
+                mapping_id=f"token_mapping_polymarket_{_slug(mapping_key)}",
+                venue_id="polymarket",
+                venue_name="Polymarket",
+                canonical_market_id=market_id,
+                canonical_outcome_id=f"{market_id}_{_slug(label)}",
+                outcome_label=label,
+                external_market_id=external_market_id,
+                condition_id=condition_id,
+                question_id=question_id,
+                gamma_market_id=gamma_market_id,
+                gamma_event_id=gamma_event_id,
+                market_address=market_address,
+                token_id=token_id,
+                asset_id=token_id,
+                token_side=side,
+                enable_orderbook=enable_orderbook,
+                first_seen_at=raw_payload.captured_at,
+                last_seen_at=raw_payload.captured_at,
+                status=status,
+                metadata={
+                    "source_payload_id": raw_payload.payload_id,
+                    "token_index": index,
+                    "fixture_file": raw_payload.metadata.get("fixture_file"),
+                },
+            )
+        )
+    return mappings
 
 
 def _rule_text(market_payload: dict[str, Any]) -> str:
@@ -434,6 +567,15 @@ def _token_ids(market_payload: dict[str, Any]) -> list[str]:
     return []
 
 
+def _token_side(label: str) -> VenueOutcomeTokenSide:
+    normalized = _normalize_space(label).casefold()
+    if normalized == "yes":
+        return VenueOutcomeTokenSide.YES
+    if normalized == "no":
+        return VenueOutcomeTokenSide.NO
+    return VenueOutcomeTokenSide.OTHER
+
+
 def _map_status(market_payload: dict[str, Any]) -> MarketStatus:
     if bool(market_payload.get("resolved")):
         return MarketStatus.SETTLED
@@ -498,6 +640,26 @@ def _optional_str(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _optional_bool(value: object) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().casefold()
+    if text in {"true", "1", "yes"}:
+        return True
+    if text in {"false", "0", "no"}:
+        return False
+    return None
+
+
+def _first_present(source: dict[str, Any], *keys: str) -> object:
+    for key in keys:
+        if key in source:
+            return source[key]
+    return None
 
 
 def _parse_datetime(value: object) -> datetime | None:

@@ -123,6 +123,38 @@ coverage remains `3 / 8`, and the remaining latest gaps are expected rule-snapsh
 staleness gaps. The final `MARKET_DETAIL` payload also had `rules_primary` and
 `rules_secondary` keys present but empty, so no rule snapshot was created or fabricated.
 
+## Polymarket Targeted Public-Read Check
+
+A matching manual Polymarket check was run with `MARKET_DETAIL,ORDERBOOK` for the two
+current Polymarket canonical market IDs. It completed as a safe `PARTIAL` run with zero
+payloads archived. Polymarket Gamma returned `422 Unprocessable Entity` for the current
+fixture-style external market IDs, and DataOps v1 records Polymarket targeted `ORDERBOOK`
+as unsupported because the public CLOB orderbook path requires token-level identifiers
+rather than the current canonical market mapping ID. This did not change market-data
+coverage and should be treated as a safe unsupported/unavailable public-read shape, not a
+data-quality regression.
+
+Token-aware Polymarket follow-up has been prepared locally after that check. It persists
+Gamma market IDs, condition/question IDs, outcome labels, `enableOrderBook`, and YES/NO
+CLOB token/asset IDs in `venue_outcome_token_mappings`. After deployment and fixture
+smoke, the safe manual Polymarket shape is:
+
+```bash
+API_BASE_URL="https://prediction-desk-staging-api.bluebush-22f9863f.centralus.azurecontainerapps.io" \
+PREDICTION_DESK_API_TOKEN="..." \
+CONFIRM_PUBLIC_READ_ONLY=true \
+PUBLIC_READ_VENUES=polymarket \
+PUBLIC_READ_ENDPOINT_TYPES=MARKET_DETAIL,ORDERBOOK,PRICE_HISTORY \
+PUBLIC_READ_MARKET_IDS=polymarket_market_... \
+MAX_PAYLOADS=5 \
+scripts/staging_public_read_pilot.sh
+```
+
+This remains public-read only. It does not pass credentials, wallets, private keys, or
+trading instructions. Do not run or schedule this Polymarket pilot until the token-aware
+image has been deployed, migrations have created the token mapping table, fixture smoke
+passes, and the selected canonical Polymarket markets have persisted token mappings.
+
 Data gaps are append-only operational evidence. A targeted run may improve the latest
 coverage report while also adding new `data_gaps` rows from the latest detection pass.
 Use the latest `DataCoverageReport` for current coverage state and use cumulative
