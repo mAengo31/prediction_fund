@@ -110,6 +110,25 @@ could do:
 
 V1 does not overwrite or backfill canonical market data from vendor samples.
 
+Dry-run classification is conservative:
+
+- price history rows can count price snapshots when timestamp and probability-style price
+  evidence is present
+- orderbook rows can count orderbook snapshots only with book-specific evidence such as
+  bid/ask fields, level/depth fields, or token + side + price + size when the sample is
+  explicitly marked as `orderbook`
+- trade rows can count trade prints only with trade-specific evidence such as `trade_id`,
+  `transaction_hash`, maker/taker fields, order IDs, fill indicators, or execution
+  timestamps
+- price + size alone does not imply a trade
+- trade rows do not imply orderbook depth
+- `sample_kind` guides classification but does not override missing evidence
+
+Ambiguous rows are warned and under-counted rather than over-counted. Dry-run warning
+codes include `SUPPRESSED_TRADE_COUNT_MISSING_TRADE_EVIDENCE`,
+`SUPPRESSED_ORDERBOOK_COUNT_MISSING_BOOK_EVIDENCE`, `AMBIGUOUS_PRICE_SIZE_ROWS`, and
+`SAMPLE_KIND_SCHEMA_MISMATCH`.
+
 ## CLI
 
 ```bash

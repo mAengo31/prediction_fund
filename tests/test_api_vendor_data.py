@@ -2,13 +2,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pytest import MonkeyPatch
+
 from prediction_desk.persistence.database import init_db
 from tests.api_test_helpers import build_test_client, sqlite_url
 
 SAMPLE_DIR = Path("sample_data/vendor_samples")
 
 
-def test_api_vendor_source_sample_and_evaluate_work(tmp_path: Path, monkeypatch) -> None:
+def test_api_vendor_source_sample_and_evaluate_work(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
     database_url = sqlite_url(tmp_path / "api_vendor_data.db")
     init_db(database_url)
     client = build_test_client(monkeypatch, database_url=database_url)
@@ -57,7 +62,7 @@ def test_api_vendor_source_sample_and_evaluate_work(tmp_path: Path, monkeypatch)
     assert evaluation.json()["evaluation_report_id"].startswith("vendor_eval_")
 
 
-def test_api_vendor_load_rejects_url(tmp_path: Path, monkeypatch) -> None:
+def test_api_vendor_load_rejects_url(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     database_url = sqlite_url(tmp_path / "api_vendor_url.db")
     init_db(database_url)
     client = build_test_client(monkeypatch, database_url=database_url)

@@ -13,6 +13,7 @@ from prediction_desk.vendor_data.file_loader import (
     validate_local_file,
 )
 from prediction_desk.vendor_data.models import (
+    VendorDatasetSource,
     VendorDatasetSourceCreate,
     VendorDryRunImportRequest,
     VendorEvaluateRequest,
@@ -31,7 +32,7 @@ def _service(database_url: str) -> VendorDataService:
     return VendorDataService(PredictionMarketRepository(session))
 
 
-def _source(service: VendorDataService):
+def _source(service: VendorDataService) -> VendorDatasetSource:
     return service.register_source(
         VendorDatasetSourceCreate(
             vendor_name="SampleVendor",
@@ -105,6 +106,9 @@ def test_schema_validation_dry_run_and_evaluation(tmp_path: Path) -> None:
     assert bad_validation.timestamp_issues
     assert dry_run.canonical_orderbooks_detected == 4
     assert dry_run.would_create_counts["orderbook_snapshots"] == 4
+    assert dry_run.canonical_trade_prints_detected == 0
+    assert dry_run.would_create_counts["trade_prints"] == 0
+    assert "SUPPRESSED_TRADE_COUNT_MISSING_TRADE_EVIDENCE" in dry_run.warnings
     assert good_eval.coverage_score > bad_eval.coverage_score
     assert good_eval.token_mapping_score > bad_eval.token_mapping_score
 
@@ -136,4 +140,97 @@ def test_dry_run_counts_price_snapshots_and_skips_invalid_rows(tmp_path: Path) -
     )
 
     assert good_run.canonical_price_snapshots_detected == 3
+    assert good_run.canonical_trade_prints_detected == 0
+    assert good_run.canonical_orderbooks_detected == 0
     assert sum(bad_run.would_skip_counts.values()) >= 1
+
+
+def test_dry_run_counts_trades_without_orderbook_overcount(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'vendor_trades.db'}"
+    service = _service(database_url)
+    source = _source(service)
+    sample = service.load_sample(
+        VendorSampleLoadRequest(
+            vendor_source_id=source.vendor_source_id,
+            file_path=str(SAMPLE_DIR / "polymarket_trades_sample.csv"),
+        )
+    )
+
+    dry_run = service.dry_run_import(
+        sample.sample_file_id,
+        VendorDryRunImportRequest(sample_kind=VendorSampleKind.TRADES),
+    )
+
+    assert dry_run.canonical_trade_prints_detected == 2
+    assert dry_run.would_create_counts["trade_prints"] == 2
+    assert dry_run.canonical_orderbooks_detected == 0
+    assert dry_run.would_create_counts["orderbook_snapshots"] == 0
+    assert "SUPPRESSED_ORDERBOOK_COUNT_MISSING_BOOK_EVIDENCE" in dry_run.warnings
+
+
+def test_mixed_sample_counts_multiple_types_only_with_evidence(tmp_path: Path) -> None:
+    path = tmp_path / "mixed_vendor_sample.csv"
+    path.write_text(
+        "\n".join(
+            [
+                "condition_id,token_id,timestamp,price,size,side,level,trade_id,observed_at,captured_at,available_at",
+                "cond1,tok_yes,2026-06-01T00:00:00Z,0.52,20,bid,1,,2026-06-01T00:00:00Z,2026-06-01T00:00:01Z,2026-06-01T00:00:01Z",
+                "cond1,tok_yes,2026-06-01T00:01:00Z,0.53,5,buy,,trade-1,2026-06-01T00:01:00Z,2026-06-01T00:01:01Z,2026-06-01T00:01:01Z",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    database_url = f"sqlite:///{tmp_path / 'vendor_mixed.db'}"
+    service = _service(database_url)
+    source = _source(service)
+    sample = service.load_sample(
+        VendorSampleLoadRequest(
+            vendor_source_id=source.vendor_source_id,
+            file_path=str(path),
+        )
+    )
+
+    dry_run = service.dry_run_import(
+        sample.sample_file_id,
+        VendorDryRunImportRequest(sample_kind=VendorSampleKind.MIXED),
+    )
+
+    assert dry_run.canonical_orderbooks_detected == 1
+    assert dry_run.canonical_trade_prints_detected == 1
+    assert dry_run.canonical_price_snapshots_detected == 2
+
+
+def test_ambiguous_price_size_rows_warn_and_under_count(tmp_path: Path) -> None:
+    path = tmp_path / "ambiguous_price_size.csv"
+    path.write_text(
+        "\n".join(
+            [
+                "condition_id,token_id,timestamp,price,size,observed_at,captured_at,available_at",
+                "cond1,tok_yes,2026-06-01T00:00:00Z,0.52,20,2026-06-01T00:00:00Z,2026-06-01T00:00:01Z,2026-06-01T00:00:01Z",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    database_url = f"sqlite:///{tmp_path / 'vendor_ambiguous.db'}"
+    service = _service(database_url)
+    source = _source(service)
+    sample = service.load_sample(
+        VendorSampleLoadRequest(
+            vendor_source_id=source.vendor_source_id,
+            file_path=str(path),
+        )
+    )
+
+    dry_run = service.dry_run_import(
+        sample.sample_file_id,
+        VendorDryRunImportRequest(sample_kind=VendorSampleKind.MIXED),
+    )
+
+    assert dry_run.canonical_orderbooks_detected == 0
+    assert dry_run.canonical_trade_prints_detected == 0
+    assert dry_run.canonical_price_snapshots_detected == 0
+    assert "AMBIGUOUS_PRICE_SIZE_ROWS" in dry_run.warnings
+    assert "SUPPRESSED_TRADE_COUNT_MISSING_TRADE_EVIDENCE" in dry_run.warnings
+    assert "SAMPLE_KIND_SCHEMA_MISMATCH" in dry_run.warnings
