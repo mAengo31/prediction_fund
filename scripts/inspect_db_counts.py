@@ -56,6 +56,12 @@ TABLES: tuple[str, ...] = (
     "desk_review_notes",
     "workbench_runs",
     "workbench_run_summaries",
+    "vendor_dataset_sources",
+    "vendor_sample_files",
+    "vendor_schema_inspections",
+    "vendor_data_validation_reports",
+    "vendor_import_dry_runs",
+    "vendor_evaluation_reports",
 )
 
 

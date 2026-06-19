@@ -205,6 +205,19 @@ from prediction_desk.scenario.models import (
 from prediction_desk.scenario.runner import ScenarioRunError, run_scenario_import
 from prediction_desk.scenario.service import ScenarioService, ScenarioServiceError
 from prediction_desk.scoring.trust_verdict import build_trust_verdict
+from prediction_desk.vendor_data.models import (
+    VendorDatasetSource,
+    VendorDatasetSourceCreate,
+    VendorDataValidationReport,
+    VendorDryRunImportRequest,
+    VendorEvaluateRequest,
+    VendorEvaluationReport,
+    VendorImportDryRun,
+    VendorSampleFile,
+    VendorSampleLoadRequest,
+    VendorSchemaInspection,
+)
+from prediction_desk.vendor_data.service import VendorDataService, VendorDataServiceError
 from prediction_desk.workbench.enums import ReviewPriorityBucket, ReviewStatus
 from prediction_desk.workbench.models import (
     CrossVenueComparisonCard,
@@ -3200,6 +3213,191 @@ def get_workbench_note(
         raise _workbench_http_error(exc) from exc
 
 
+@v1_router.post(
+    "/vendor-data/sources",
+    response_model=VendorDatasetSource,
+    dependencies=[Depends(require_api_token)],
+)
+def create_vendor_dataset_source(
+    request_body: VendorDatasetSourceCreate,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> VendorDatasetSource:
+    return VendorDataService(repo).register_source(request_body)
+
+
+@v1_router.get(
+    "/vendor-data/sources",
+    response_model=list[VendorDatasetSource],
+    dependencies=[Depends(require_api_token)],
+)
+def list_vendor_dataset_sources(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[VendorDatasetSource]:
+    return VendorDataService(repo).list_sources(limit=limit, offset=offset)
+
+
+@v1_router.get(
+    "/vendor-data/sources/{vendor_source_id}",
+    response_model=VendorDatasetSource,
+    dependencies=[Depends(require_api_token)],
+)
+def get_vendor_dataset_source(
+    vendor_source_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> VendorDatasetSource:
+    try:
+        return VendorDataService(repo).get_source(vendor_source_id)
+    except VendorDataServiceError as exc:
+        raise _vendor_data_http_error(exc) from exc
+
+
+@v1_router.post(
+    "/vendor-data/samples/load",
+    response_model=VendorSampleFile,
+    dependencies=[Depends(require_api_token)],
+)
+def load_vendor_sample(
+    request_body: VendorSampleLoadRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> VendorSampleFile:
+    try:
+        return VendorDataService(repo).load_sample(request_body)
+    except VendorDataServiceError as exc:
+        raise _vendor_data_http_error(exc) from exc
+
+
+@v1_router.get(
+    "/vendor-data/samples",
+    response_model=list[VendorSampleFile],
+    dependencies=[Depends(require_api_token)],
+)
+def list_vendor_samples(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    vendor_source_id: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[VendorSampleFile]:
+    return VendorDataService(repo).list_samples(
+        vendor_source_id=vendor_source_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@v1_router.get(
+    "/vendor-data/samples/{sample_file_id}",
+    response_model=VendorSampleFile,
+    dependencies=[Depends(require_api_token)],
+)
+def get_vendor_sample(
+    sample_file_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> VendorSampleFile:
+    try:
+        return VendorDataService(repo).get_sample(sample_file_id)
+    except VendorDataServiceError as exc:
+        raise _vendor_data_http_error(exc) from exc
+
+
+@v1_router.post(
+    "/vendor-data/samples/{sample_file_id}/inspect",
+    response_model=VendorSchemaInspection,
+    dependencies=[Depends(require_api_token)],
+)
+def inspect_vendor_sample(
+    sample_file_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> VendorSchemaInspection:
+    try:
+        return VendorDataService(repo).inspect_sample(sample_file_id)
+    except VendorDataServiceError as exc:
+        raise _vendor_data_http_error(exc) from exc
+
+
+@v1_router.post(
+    "/vendor-data/samples/{sample_file_id}/validate",
+    response_model=VendorDataValidationReport,
+    dependencies=[Depends(require_api_token)],
+)
+def validate_vendor_sample(
+    sample_file_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> VendorDataValidationReport:
+    try:
+        return VendorDataService(repo).validate_sample(sample_file_id)
+    except VendorDataServiceError as exc:
+        raise _vendor_data_http_error(exc) from exc
+
+
+@v1_router.post(
+    "/vendor-data/samples/{sample_file_id}/dry-run-import",
+    response_model=VendorImportDryRun,
+    dependencies=[Depends(require_api_token)],
+)
+def dry_run_vendor_sample_import(
+    sample_file_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    request_body: VendorDryRunImportRequest | None = None,
+) -> VendorImportDryRun:
+    try:
+        return VendorDataService(repo).dry_run_import(
+            sample_file_id,
+            request_body or VendorDryRunImportRequest(),
+        )
+    except VendorDataServiceError as exc:
+        raise _vendor_data_http_error(exc) from exc
+
+
+@v1_router.post(
+    "/vendor-data/evaluate",
+    response_model=VendorEvaluationReport,
+    dependencies=[Depends(require_api_token)],
+)
+def evaluate_vendor_samples(
+    request_body: VendorEvaluateRequest,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> VendorEvaluationReport:
+    try:
+        return VendorDataService(repo).evaluate(request_body)
+    except VendorDataServiceError as exc:
+        raise _vendor_data_http_error(exc) from exc
+
+
+@v1_router.get(
+    "/vendor-data/reports",
+    response_model=list[VendorEvaluationReport],
+    dependencies=[Depends(require_api_token)],
+)
+def list_vendor_evaluation_reports(
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    vendor_source_id: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[VendorEvaluationReport]:
+    return VendorDataService(repo).list_reports(
+        vendor_source_id=vendor_source_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@v1_router.get(
+    "/vendor-data/reports/{evaluation_report_id}",
+    response_model=VendorEvaluationReport,
+    dependencies=[Depends(require_api_token)],
+)
+def get_vendor_evaluation_report(
+    evaluation_report_id: str,
+    repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+) -> VendorEvaluationReport:
+    try:
+        return VendorDataService(repo).get_report(evaluation_report_id)
+    except VendorDataServiceError as exc:
+        raise _vendor_data_http_error(exc) from exc
+
+
 def _settings(request: Request) -> Settings:
     return cast(Settings, request.app.state.settings)
 
@@ -3442,6 +3640,29 @@ def _workbench_http_error(exc: WorkbenchServiceError) -> HTTPException:
         "workbench_run_summary_not_found",
     }:
         status_code = status.HTTP_404_NOT_FOUND
+    else:
+        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    return HTTPException(status_code=status_code, detail=exc.code)
+
+
+def _vendor_data_http_error(exc: VendorDataServiceError) -> HTTPException:
+    if exc.code in {
+        "vendor_source_not_found",
+        "vendor_sample_file_not_found",
+        "vendor_evaluation_report_not_found",
+    }:
+        status_code = status.HTTP_404_NOT_FOUND
+    elif exc.code in {
+        "vendor_file_path_must_be_local",
+        "vendor_sample_file_too_large",
+        "vendor_file_type_unsupported",
+        "vendor_parquet_unsupported",
+        "vendor_json_shape_unsupported",
+        "vendor_row_shape_unsupported",
+        "vendor_evaluation_requires_samples",
+        "vendor_sample_source_mismatch",
+    }:
+        status_code = status.HTTP_400_BAD_REQUEST
     else:
         status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     return HTTPException(status_code=status_code, detail=exc.code)

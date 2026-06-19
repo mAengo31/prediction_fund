@@ -72,6 +72,14 @@ from prediction_desk.scenario.models import ScenarioRunConfig
 from prediction_desk.scenario.runner import ScenarioRunError, run_scenario_import
 from prediction_desk.scenario.service import ScenarioService, ScenarioServiceError
 from prediction_desk.scoring.trust_verdict import build_trust_verdict
+from prediction_desk.vendor_data.enums import VendorLicenseStatus, VendorSampleKind
+from prediction_desk.vendor_data.models import (
+    VendorDatasetSourceCreate,
+    VendorDryRunImportRequest,
+    VendorEvaluateRequest,
+    VendorSampleLoadRequest,
+)
+from prediction_desk.vendor_data.service import VendorDataService, VendorDataServiceError
 from prediction_desk.workbench.enums import (
     DeskReviewNoteType,
     ReviewOutcome,
@@ -4044,6 +4052,276 @@ def workbench_update_item_status_command(
                 item.metadata.get("review_outcome") or "",
                 item.metadata.get("linked_note_id") or "",
             )
+        ],
+    )
+
+
+@app.command("vendor-register-source")
+def vendor_register_source_command(
+    vendor_name: Annotated[str, typer.Option("--vendor-name", help="Vendor name.")],
+    dataset_name: Annotated[str, typer.Option("--dataset-name", help="Dataset name.")],
+    dataset_version: Annotated[
+        str, typer.Option("--dataset-version", help="Dataset version.")
+    ],
+    contact_url: Annotated[
+        str | None, typer.Option("--contact-url", help="Vendor contact URL.")
+    ] = None,
+    license_status: Annotated[
+        VendorLicenseStatus,
+        typer.Option("--license-status", help="Vendor license status."),
+    ] = VendorLicenseStatus.UNKNOWN,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to write.")
+    ] = None,
+) -> None:
+    """Registers a vendor dataset source for sample evaluation."""
+
+    request = VendorDatasetSourceCreate(
+        vendor_name=vendor_name,
+        dataset_name=dataset_name,
+        dataset_version=dataset_version,
+        contact_url=contact_url,
+        license_status=license_status,
+    )
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        source = VendorDataService(PredictionMarketRepository(session)).register_source(request)
+    _print_table(
+        headers=("vendor_source_id", "vendor_name", "dataset_name", "license_status"),
+        rows=[
+            (
+                source.vendor_source_id,
+                source.vendor_name,
+                source.dataset_name,
+                source.license_status.value,
+            )
+        ],
+    )
+
+
+@app.command("vendor-load-sample")
+def vendor_load_sample_command(
+    vendor_source_id: Annotated[
+        str, typer.Option("--vendor-source-id", help="Vendor source ID.")
+    ],
+    file_path: Annotated[str, typer.Option("--file-path", help="Local sample file path.")],
+    max_size_mb: Annotated[
+        int, typer.Option("--max-size-mb", help="Maximum sample file size in MB.")
+    ] = 100,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to write.")
+    ] = None,
+) -> None:
+    """Loads local vendor sample metadata without mutating the original file."""
+
+    request = VendorSampleLoadRequest(
+        vendor_source_id=vendor_source_id,
+        file_path=file_path,
+        max_size_mb=max_size_mb,
+    )
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            sample = VendorDataService(PredictionMarketRepository(session)).load_sample(request)
+        except VendorDataServiceError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+    _print_table(
+        headers=("sample_file_id", "file_type", "rows", "file_hash"),
+        rows=[
+            (
+                sample.sample_file_id,
+                sample.file_type.value,
+                sample.row_count or 0,
+                sample.file_hash,
+            )
+        ],
+    )
+
+
+@app.command("vendor-inspect-sample")
+def vendor_inspect_sample_command(
+    sample_file_id: Annotated[
+        str, typer.Option("--sample-file-id", help="Vendor sample file ID.")
+    ],
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to write.")
+    ] = None,
+) -> None:
+    """Inspects vendor sample columns and likely data roles."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            inspection = VendorDataService(PredictionMarketRepository(session)).inspect_sample(
+                sample_file_id
+            )
+        except VendorDataServiceError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+    _print_table(
+        headers=("schema_inspection_id", "columns", "token_columns", "price_columns"),
+        rows=[
+            (
+                inspection.schema_inspection_id,
+                ",".join(inspection.detected_columns),
+                ",".join(inspection.token_identifier_columns),
+                ",".join(inspection.price_columns),
+            )
+        ],
+    )
+
+
+@app.command("vendor-validate-sample")
+def vendor_validate_sample_command(
+    sample_file_id: Annotated[
+        str, typer.Option("--sample-file-id", help="Vendor sample file ID.")
+    ],
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to write.")
+    ] = None,
+) -> None:
+    """Validates a vendor sample for identifiers, timestamps, and numeric fields."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            report = VendorDataService(PredictionMarketRepository(session)).validate_sample(
+                sample_file_id
+            )
+        except VendorDataServiceError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+    _print_table(
+        headers=("validation_report_id", "status", "rows", "warnings", "price_issues"),
+        rows=[
+            (
+                report.validation_report_id,
+                report.validation_status.value,
+                report.row_count,
+                len(report.warnings),
+                len(report.price_issues),
+            )
+        ],
+    )
+
+
+@app.command("vendor-dry-run-import")
+def vendor_dry_run_import_command(
+    sample_file_id: Annotated[
+        str, typer.Option("--sample-file-id", help="Vendor sample file ID.")
+    ],
+    sample_kind: Annotated[
+        VendorSampleKind | None,
+        typer.Option("--sample-kind", help="market_data/orderbook/trades/price_history/mixed."),
+    ] = None,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to write.")
+    ] = None,
+) -> None:
+    """Estimates canonical objects that would be created without importing them."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            dry_run = VendorDataService(PredictionMarketRepository(session)).dry_run_import(
+                sample_file_id,
+                VendorDryRunImportRequest(sample_kind=sample_kind),
+            )
+        except VendorDataServiceError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+    _print_table(
+        headers=("dry_run_id", "status", "rows", "prices", "orderbooks", "skips"),
+        rows=[
+            (
+                dry_run.dry_run_id,
+                dry_run.status.value,
+                dry_run.rows_examined,
+                dry_run.canonical_price_snapshots_detected,
+                dry_run.canonical_orderbooks_detected,
+                sum(dry_run.would_skip_counts.values()),
+            )
+        ],
+    )
+
+
+@app.command("vendor-evaluate")
+def vendor_evaluate_command(
+    vendor_source_id: Annotated[
+        str, typer.Option("--vendor-source-id", help="Vendor source ID.")
+    ],
+    sample_file_id: Annotated[
+        list[str] | None,
+        typer.Option("--sample-file-id", help="Sample file ID; repeatable."),
+    ] = None,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to write.")
+    ] = None,
+) -> None:
+    """Builds a vendor evaluation report from local sample files."""
+
+    request = VendorEvaluateRequest(
+        vendor_source_id=vendor_source_id,
+        sample_file_ids=list(sample_file_id or []),
+    )
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory.begin() as session:
+        try:
+            report = VendorDataService(PredictionMarketRepository(session)).evaluate(request)
+        except VendorDataServiceError as exc:
+            typer.echo(exc.code, err=True)
+            raise typer.Exit(1) from exc
+    _print_table(
+        headers=("evaluation_report_id", "status", "coverage", "token", "replay"),
+        rows=[
+            (
+                report.evaluation_report_id,
+                report.overall_status.value,
+                report.coverage_score,
+                report.token_mapping_score,
+                report.replay_safety_score,
+            )
+        ],
+    )
+
+
+@app.command("vendor-reports")
+def vendor_reports_command(
+    vendor_source_id: Annotated[
+        str | None, typer.Option("--vendor-source-id", help="Vendor source ID.")
+    ] = None,
+    limit: Annotated[int, typer.Option("--limit", help="Maximum reports.")] = 50,
+    database_url: Annotated[
+        str | None, typer.Option("--database-url", help="Database URL to read.")
+    ] = None,
+) -> None:
+    """Lists vendor evaluation reports."""
+
+    engine = build_engine(database_url)
+    session_factory = build_session_factory(engine)
+    with session_factory() as session:
+        reports = VendorDataService(PredictionMarketRepository(session)).list_reports(
+            vendor_source_id=vendor_source_id,
+            limit=limit,
+        )
+    _print_table(
+        headers=("evaluation_report_id", "vendor_source_id", "status", "coverage", "token"),
+        rows=[
+            (
+                report.evaluation_report_id,
+                report.vendor_source_id,
+                report.overall_status.value,
+                report.coverage_score,
+                report.token_mapping_score,
+            )
+            for report in reports
         ],
     )
 

@@ -2479,3 +2479,135 @@ class WorkbenchRunSummaryRecord(Base):
     top_reason_codes: Mapped[dict[str, int]] = mapped_column(JSON, nullable=False)
     markets_reviewed: Mapped[int] = mapped_column(nullable=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class VendorDatasetSourceRecord(Base):
+    __tablename__ = "vendor_dataset_sources"
+
+    vendor_source_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    vendor_name: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    dataset_name: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    dataset_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    contact_url: Mapped[str | None] = mapped_column(String(1024))
+    license_status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    supported_file_types: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class VendorSampleFileRecord(Base):
+    __tablename__ = "vendor_sample_files"
+
+    sample_file_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    vendor_source_id: Mapped[str] = mapped_column(
+        ForeignKey("vendor_dataset_sources.vendor_source_id"), nullable=False, index=True
+    )
+    file_name: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
+    file_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    local_path: Mapped[str] = mapped_column(String(2048), nullable=False)
+    imported_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    file_size_bytes: Mapped[int] = mapped_column(nullable=False)
+    file_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    row_count: Mapped[int | None] = mapped_column()
+    schema_summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class VendorSchemaInspectionRecord(Base):
+    __tablename__ = "vendor_schema_inspections"
+
+    schema_inspection_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    sample_file_id: Mapped[str] = mapped_column(
+        ForeignKey("vendor_sample_files.sample_file_id"), nullable=False, index=True
+    )
+    inspected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    detected_columns: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    detected_types: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False)
+    timestamp_columns: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    market_identifier_columns: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    token_identifier_columns: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    price_columns: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    size_columns: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    orderbook_columns: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    trade_columns: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    resolution_columns: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    warnings: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class VendorDataValidationReportRecord(Base):
+    __tablename__ = "vendor_data_validation_reports"
+
+    validation_report_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    sample_file_id: Mapped[str] = mapped_column(
+        ForeignKey("vendor_sample_files.sample_file_id"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    validation_status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    row_count: Mapped[int] = mapped_column(nullable=False)
+    missing_required_columns: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    token_mapping_issues: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    timestamp_issues: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    price_issues: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    duplicate_issues: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    point_in_time_issues: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    warnings: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class VendorImportDryRunRecord(Base):
+    __tablename__ = "vendor_import_dry_runs"
+
+    dry_run_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    sample_file_id: Mapped[str] = mapped_column(
+        ForeignKey("vendor_sample_files.sample_file_id"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    rows_examined: Mapped[int] = mapped_column(nullable=False)
+    canonical_markets_detected: Mapped[int] = mapped_column(nullable=False)
+    canonical_orderbooks_detected: Mapped[int] = mapped_column(nullable=False)
+    canonical_price_snapshots_detected: Mapped[int] = mapped_column(nullable=False)
+    canonical_trade_prints_detected: Mapped[int] = mapped_column(nullable=False)
+    canonical_resolution_events_detected: Mapped[int] = mapped_column(nullable=False)
+    would_create_counts: Mapped[dict[str, int]] = mapped_column(JSON, nullable=False)
+    would_skip_counts: Mapped[dict[str, int]] = mapped_column(JSON, nullable=False)
+    errors: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    warnings: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
+
+
+class VendorEvaluationReportRecord(Base):
+    __tablename__ = "vendor_evaluation_reports"
+
+    evaluation_report_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    vendor_source_id: Mapped[str] = mapped_column(
+        ForeignKey("vendor_dataset_sources.vendor_source_id"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    sample_file_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    overall_status: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    coverage_score: Mapped[int] = mapped_column(nullable=False)
+    token_mapping_score: Mapped[int] = mapped_column(nullable=False)
+    timestamp_quality_score: Mapped[int] = mapped_column(nullable=False)
+    orderbook_quality_score: Mapped[int] = mapped_column(nullable=False)
+    price_history_quality_score: Mapped[int] = mapped_column(nullable=False)
+    replay_safety_score: Mapped[int] = mapped_column(nullable=False)
+    license_readiness_score: Mapped[int] = mapped_column(nullable=False)
+    strengths: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    weaknesses: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    questions_for_vendor: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    recommendation: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)

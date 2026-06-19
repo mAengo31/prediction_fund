@@ -251,6 +251,14 @@ This recomputes coverage/gaps, integrity, equivalence/divergence where possible,
 context, simulated paper context, research context, workbench queue/cards, and a desk note.
 It does not call public-read collection or schedule any job.
 
+## Vendor Evaluation Context
+
+Vendor data evaluation reports are operator review artifacts in v1. They help decide
+whether a third-party historical sample is worth deeper analysis, vendor follow-up, or a
+future importer design. They are not consumed directly by workbench scoring, do not create
+canonical market data, do not create public-read schedules, and do not add vendor API
+access, credentials, or execution authority.
+
 ## Prohibited
 
 The workbench does not add:

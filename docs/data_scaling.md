@@ -192,3 +192,29 @@ Interpret current coverage from the latest `DataCoverageReport`. Interpret cumul
 `DataGap` row counts as history of detection passes, not as the current number of open
 gaps. For public-read pilots, do not close missing-rule gaps unless the archived public
 payload contains usable rule, resolution, or settlement text.
+
+## Vendor Sample Evaluation
+
+Vendor Dataset Intake + Evaluation Scaffold v1 is adjacent to DataOps, but it is not a
+collection plan and it does not call vendor APIs. It accepts local sample files, records
+file metadata and hashes, inspects schemas, validates identifiers and timestamps, runs a
+dry-run canonical import estimate, and stores a vendor evaluation report.
+
+Use it before buying or integrating third-party historical datasets:
+
+```bash
+prediction-desk vendor-load-sample \
+  --vendor-source-id vendor_source_... \
+  --file-path sample_data/vendor_samples/polymarket_price_history_sample.csv
+prediction-desk vendor-dry-run-import \
+  --sample-file-id vendor_sample_... \
+  --sample-kind price_history
+prediction-desk vendor-evaluate \
+  --vendor-source-id vendor_source_... \
+  --sample-file-id vendor_sample_...
+```
+
+V1 is dry-run only for canonical market data. It does not overwrite historical data,
+fabricate missing token IDs, create orderbooks from incomplete rows, or make backfilled
+timestamps replay-visible before an explicit availability timestamp in a future importer.
+See [vendor_data_evaluation.md](vendor_data_evaluation.md).

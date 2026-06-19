@@ -40,6 +40,9 @@ verdicts are represented as replayable snapshots.
 - Desk Decision Workbench v1 for append-only review queues, latest active queue views,
   market decision cards, cross-venue comparison cards, data-gap/pre-trade/paper/research
   summaries, and desk review notes.
+- Vendor Dataset Intake + Evaluation Scaffold v1 for local-only vendor sample loading,
+  schema inspection, identifier/timestamp validation, dry-run canonical import estimates,
+  and vendor evaluation reports.
 - A deterministic v0 resolution-risk scorer.
 - A deterministic v0 trust-verdict builder.
 - SQLAlchemy 2.0 ORM mappings and repository methods for local persistence.
@@ -67,6 +70,7 @@ This is not a trading bot. This round intentionally excludes:
 - Real PnL calculation or unlabeled/fabricated performance metrics.
 - Production alpha models or live strategy automation.
 - Authenticated venue endpoints or venue credentials.
+- Vendor API credentials or automatic vendor API pulls.
 
 ## Setup
 
@@ -347,6 +351,32 @@ prediction-desk dataops-run-collection \
 ```
 
 Public-read collection remains manual and unscheduled. No venue credentials are accepted.
+
+Evaluate local vendor data samples without importing canonical market data:
+
+```bash
+prediction-desk vendor-register-source \
+  --vendor-name SampleVendor \
+  --dataset-name "Polymarket history" \
+  --dataset-version sample-v1 \
+  --license-status SAMPLE_ONLY
+prediction-desk vendor-load-sample \
+  --vendor-source-id vendor_source_... \
+  --file-path sample_data/vendor_samples/polymarket_orderbook_sample.jsonl
+prediction-desk vendor-inspect-sample --sample-file-id vendor_sample_...
+prediction-desk vendor-validate-sample --sample-file-id vendor_sample_...
+prediction-desk vendor-dry-run-import \
+  --sample-file-id vendor_sample_... \
+  --sample-kind orderbook
+prediction-desk vendor-evaluate \
+  --vendor-source-id vendor_source_... \
+  --sample-file-id vendor_sample_...
+prediction-desk vendor-reports --vendor-source-id vendor_source_...
+```
+
+Vendor evaluation is local-file only. It does not call vendor APIs, accept vendor
+credentials, or write canonical market data in v1. See
+[docs/vendor_data_evaluation.md](docs/vendor_data_evaluation.md).
 
 Use a custom database URL:
 

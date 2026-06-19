@@ -214,6 +214,12 @@ from prediction_desk.persistence.orm import (
     TradeIntentRecord,
     TradePrintRecord,
     TrustVerdictRecord,
+    VendorDatasetSourceRecord,
+    VendorDataValidationReportRecord,
+    VendorEvaluationReportRecord,
+    VendorImportDryRunRecord,
+    VendorSampleFileRecord,
+    VendorSchemaInspectionRecord,
     VenueMarketMappingRecord,
     VenueOutcomeTokenMappingRecord,
     VenueRecord,
@@ -291,6 +297,21 @@ from prediction_desk.scenario.models import (
     ScenarioRunSummary,
     ScenarioSeedBundle,
     ScenarioSimulationSpec,
+)
+from prediction_desk.vendor_data.enums import (
+    VendorEvaluationStatus,
+    VendorFileType,
+    VendorImportDryRunStatus,
+    VendorLicenseStatus,
+    VendorValidationStatus,
+)
+from prediction_desk.vendor_data.models import (
+    VendorDatasetSource,
+    VendorDataValidationReport,
+    VendorEvaluationReport,
+    VendorImportDryRun,
+    VendorSampleFile,
+    VendorSchemaInspection,
 )
 from prediction_desk.workbench.enums import (
     DeskReviewNoteType,
@@ -3631,6 +3652,145 @@ class PredictionMarketRepository:
         record = self.session.scalar(stmt)
         return _workbench_run_summary_from_record(record) if record else None
 
+    def save_vendor_dataset_source(
+        self,
+        source: VendorDatasetSource,
+    ) -> VendorDatasetSource:
+        self.session.merge(_vendor_dataset_source_to_record(source))
+        self.session.flush()
+        return source
+
+    def get_vendor_dataset_source(
+        self,
+        vendor_source_id: str,
+    ) -> VendorDatasetSource | None:
+        record = self.session.get(VendorDatasetSourceRecord, vendor_source_id)
+        return _vendor_dataset_source_from_record(record) if record else None
+
+    def list_vendor_dataset_sources(
+        self,
+        *,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[VendorDatasetSource]:
+        stmt = (
+            select(VendorDatasetSourceRecord)
+            .order_by(
+                VendorDatasetSourceRecord.vendor_name,
+                VendorDatasetSourceRecord.dataset_name,
+                VendorDatasetSourceRecord.dataset_version,
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_vendor_dataset_source_from_record(record) for record in self.session.scalars(stmt)]
+
+    def save_vendor_sample_file(self, sample: VendorSampleFile) -> VendorSampleFile:
+        self.session.merge(_vendor_sample_file_to_record(sample))
+        self.session.flush()
+        return sample
+
+    def get_vendor_sample_file(self, sample_file_id: str) -> VendorSampleFile | None:
+        record = self.session.get(VendorSampleFileRecord, sample_file_id)
+        return _vendor_sample_file_from_record(record) if record else None
+
+    def list_vendor_sample_files(
+        self,
+        *,
+        vendor_source_id: str | None = None,
+        limit: int = 500,
+        offset: int = 0,
+    ) -> list[VendorSampleFile]:
+        stmt = (
+            select(VendorSampleFileRecord)
+            .order_by(
+                desc(VendorSampleFileRecord.imported_at),
+                VendorSampleFileRecord.sample_file_id,
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        if vendor_source_id is not None:
+            stmt = stmt.where(VendorSampleFileRecord.vendor_source_id == vendor_source_id)
+        return [_vendor_sample_file_from_record(record) for record in self.session.scalars(stmt)]
+
+    def save_vendor_schema_inspection(
+        self,
+        inspection: VendorSchemaInspection,
+    ) -> VendorSchemaInspection:
+        self.session.merge(_vendor_schema_inspection_to_record(inspection))
+        self.session.flush()
+        return inspection
+
+    def get_vendor_schema_inspection(
+        self,
+        schema_inspection_id: str,
+    ) -> VendorSchemaInspection | None:
+        record = self.session.get(VendorSchemaInspectionRecord, schema_inspection_id)
+        return _vendor_schema_inspection_from_record(record) if record else None
+
+    def save_vendor_data_validation_report(
+        self,
+        report: VendorDataValidationReport,
+    ) -> VendorDataValidationReport:
+        self.session.merge(_vendor_data_validation_report_to_record(report))
+        self.session.flush()
+        return report
+
+    def get_vendor_data_validation_report(
+        self,
+        validation_report_id: str,
+    ) -> VendorDataValidationReport | None:
+        record = self.session.get(VendorDataValidationReportRecord, validation_report_id)
+        return _vendor_data_validation_report_from_record(record) if record else None
+
+    def save_vendor_import_dry_run(self, dry_run: VendorImportDryRun) -> VendorImportDryRun:
+        self.session.merge(_vendor_import_dry_run_to_record(dry_run))
+        self.session.flush()
+        return dry_run
+
+    def get_vendor_import_dry_run(self, dry_run_id: str) -> VendorImportDryRun | None:
+        record = self.session.get(VendorImportDryRunRecord, dry_run_id)
+        return _vendor_import_dry_run_from_record(record) if record else None
+
+    def save_vendor_evaluation_report(
+        self,
+        report: VendorEvaluationReport,
+    ) -> VendorEvaluationReport:
+        self.session.merge(_vendor_evaluation_report_to_record(report))
+        self.session.flush()
+        return report
+
+    def get_vendor_evaluation_report(
+        self,
+        evaluation_report_id: str,
+    ) -> VendorEvaluationReport | None:
+        record = self.session.get(VendorEvaluationReportRecord, evaluation_report_id)
+        return _vendor_evaluation_report_from_record(record) if record else None
+
+    def list_vendor_evaluation_reports(
+        self,
+        *,
+        vendor_source_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[VendorEvaluationReport]:
+        stmt = (
+            select(VendorEvaluationReportRecord)
+            .order_by(
+                desc(VendorEvaluationReportRecord.created_at),
+                VendorEvaluationReportRecord.evaluation_report_id,
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+        if vendor_source_id is not None:
+            stmt = stmt.where(VendorEvaluationReportRecord.vendor_source_id == vendor_source_id)
+        return [
+            _vendor_evaluation_report_from_record(record)
+            for record in self.session.scalars(stmt)
+        ]
+
 
 def _metadata(value: dict[str, Any] | None) -> dict[str, Any]:
     return dict(value or {})
@@ -3651,6 +3811,242 @@ def _json_compatible(value: Any) -> Any:
 def _json_metadata(value: dict[str, Any] | None) -> dict[str, Any]:
     metadata = _json_compatible(dict(value or {}))
     return dict(metadata)
+
+
+def _vendor_dataset_source_to_record(
+    source: VendorDatasetSource,
+) -> VendorDatasetSourceRecord:
+    return VendorDatasetSourceRecord(
+        vendor_source_id=source.vendor_source_id,
+        vendor_name=source.vendor_name,
+        dataset_name=source.dataset_name,
+        dataset_version=source.dataset_version,
+        created_at=source.created_at,
+        contact_url=source.contact_url,
+        license_status=source.license_status.value,
+        supported_file_types=list(source.supported_file_types),
+        metadata_json=_json_metadata(source.metadata),
+    )
+
+
+def _vendor_dataset_source_from_record(
+    record: VendorDatasetSourceRecord,
+) -> VendorDatasetSource:
+    return VendorDatasetSource(
+        vendor_source_id=record.vendor_source_id,
+        vendor_name=record.vendor_name,
+        dataset_name=record.dataset_name,
+        dataset_version=record.dataset_version,
+        created_at=record.created_at,
+        contact_url=record.contact_url,
+        license_status=VendorLicenseStatus(record.license_status),
+        supported_file_types=list(record.supported_file_types),
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _vendor_sample_file_to_record(sample: VendorSampleFile) -> VendorSampleFileRecord:
+    return VendorSampleFileRecord(
+        sample_file_id=sample.sample_file_id,
+        vendor_source_id=sample.vendor_source_id,
+        file_name=sample.file_name,
+        file_type=sample.file_type.value,
+        local_path=sample.local_path,
+        imported_at=sample.imported_at,
+        file_size_bytes=sample.file_size_bytes,
+        file_hash=sample.file_hash,
+        row_count=sample.row_count,
+        schema_summary=_json_metadata(sample.schema_summary),
+        metadata_json=_json_metadata(sample.metadata),
+    )
+
+
+def _vendor_sample_file_from_record(record: VendorSampleFileRecord) -> VendorSampleFile:
+    return VendorSampleFile(
+        sample_file_id=record.sample_file_id,
+        vendor_source_id=record.vendor_source_id,
+        file_name=record.file_name,
+        file_type=VendorFileType(record.file_type),
+        local_path=record.local_path,
+        imported_at=record.imported_at,
+        file_size_bytes=record.file_size_bytes,
+        file_hash=record.file_hash,
+        row_count=record.row_count,
+        schema_summary=_metadata(record.schema_summary),
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _vendor_schema_inspection_to_record(
+    inspection: VendorSchemaInspection,
+) -> VendorSchemaInspectionRecord:
+    return VendorSchemaInspectionRecord(
+        schema_inspection_id=inspection.schema_inspection_id,
+        sample_file_id=inspection.sample_file_id,
+        inspected_at=inspection.inspected_at,
+        detected_columns=list(inspection.detected_columns),
+        detected_types=dict(inspection.detected_types),
+        timestamp_columns=list(inspection.timestamp_columns),
+        market_identifier_columns=list(inspection.market_identifier_columns),
+        token_identifier_columns=list(inspection.token_identifier_columns),
+        price_columns=list(inspection.price_columns),
+        size_columns=list(inspection.size_columns),
+        orderbook_columns=list(inspection.orderbook_columns),
+        trade_columns=list(inspection.trade_columns),
+        resolution_columns=list(inspection.resolution_columns),
+        warnings=list(inspection.warnings),
+        metadata_json=_json_metadata(inspection.metadata),
+    )
+
+
+def _vendor_schema_inspection_from_record(
+    record: VendorSchemaInspectionRecord,
+) -> VendorSchemaInspection:
+    return VendorSchemaInspection(
+        schema_inspection_id=record.schema_inspection_id,
+        sample_file_id=record.sample_file_id,
+        inspected_at=record.inspected_at,
+        detected_columns=list(record.detected_columns),
+        detected_types=dict(record.detected_types),
+        timestamp_columns=list(record.timestamp_columns),
+        market_identifier_columns=list(record.market_identifier_columns),
+        token_identifier_columns=list(record.token_identifier_columns),
+        price_columns=list(record.price_columns),
+        size_columns=list(record.size_columns),
+        orderbook_columns=list(record.orderbook_columns),
+        trade_columns=list(record.trade_columns),
+        resolution_columns=list(record.resolution_columns),
+        warnings=list(record.warnings),
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _vendor_data_validation_report_to_record(
+    report: VendorDataValidationReport,
+) -> VendorDataValidationReportRecord:
+    return VendorDataValidationReportRecord(
+        validation_report_id=report.validation_report_id,
+        sample_file_id=report.sample_file_id,
+        created_at=report.created_at,
+        validation_status=report.validation_status.value,
+        row_count=report.row_count,
+        missing_required_columns=list(report.missing_required_columns),
+        token_mapping_issues=list(report.token_mapping_issues),
+        timestamp_issues=list(report.timestamp_issues),
+        price_issues=list(report.price_issues),
+        duplicate_issues=list(report.duplicate_issues),
+        point_in_time_issues=list(report.point_in_time_issues),
+        warnings=list(report.warnings),
+        metadata_json=_json_metadata(report.metadata),
+    )
+
+
+def _vendor_data_validation_report_from_record(
+    record: VendorDataValidationReportRecord,
+) -> VendorDataValidationReport:
+    return VendorDataValidationReport(
+        validation_report_id=record.validation_report_id,
+        sample_file_id=record.sample_file_id,
+        created_at=record.created_at,
+        validation_status=VendorValidationStatus(record.validation_status),
+        row_count=record.row_count,
+        missing_required_columns=list(record.missing_required_columns),
+        token_mapping_issues=list(record.token_mapping_issues),
+        timestamp_issues=list(record.timestamp_issues),
+        price_issues=list(record.price_issues),
+        duplicate_issues=list(record.duplicate_issues),
+        point_in_time_issues=list(record.point_in_time_issues),
+        warnings=list(record.warnings),
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _vendor_import_dry_run_to_record(dry_run: VendorImportDryRun) -> VendorImportDryRunRecord:
+    return VendorImportDryRunRecord(
+        dry_run_id=dry_run.dry_run_id,
+        sample_file_id=dry_run.sample_file_id,
+        created_at=dry_run.created_at,
+        status=dry_run.status.value,
+        rows_examined=dry_run.rows_examined,
+        canonical_markets_detected=dry_run.canonical_markets_detected,
+        canonical_orderbooks_detected=dry_run.canonical_orderbooks_detected,
+        canonical_price_snapshots_detected=dry_run.canonical_price_snapshots_detected,
+        canonical_trade_prints_detected=dry_run.canonical_trade_prints_detected,
+        canonical_resolution_events_detected=dry_run.canonical_resolution_events_detected,
+        would_create_counts=dict(dry_run.would_create_counts),
+        would_skip_counts=dict(dry_run.would_skip_counts),
+        errors=list(dry_run.errors),
+        warnings=list(dry_run.warnings),
+        metadata_json=_json_metadata(dry_run.metadata),
+    )
+
+
+def _vendor_import_dry_run_from_record(record: VendorImportDryRunRecord) -> VendorImportDryRun:
+    return VendorImportDryRun(
+        dry_run_id=record.dry_run_id,
+        sample_file_id=record.sample_file_id,
+        created_at=record.created_at,
+        status=VendorImportDryRunStatus(record.status),
+        rows_examined=record.rows_examined,
+        canonical_markets_detected=record.canonical_markets_detected,
+        canonical_orderbooks_detected=record.canonical_orderbooks_detected,
+        canonical_price_snapshots_detected=record.canonical_price_snapshots_detected,
+        canonical_trade_prints_detected=record.canonical_trade_prints_detected,
+        canonical_resolution_events_detected=record.canonical_resolution_events_detected,
+        would_create_counts=dict(record.would_create_counts),
+        would_skip_counts=dict(record.would_skip_counts),
+        errors=list(record.errors),
+        warnings=list(record.warnings),
+        metadata=_metadata(record.metadata_json),
+    )
+
+
+def _vendor_evaluation_report_to_record(
+    report: VendorEvaluationReport,
+) -> VendorEvaluationReportRecord:
+    return VendorEvaluationReportRecord(
+        evaluation_report_id=report.evaluation_report_id,
+        vendor_source_id=report.vendor_source_id,
+        created_at=report.created_at,
+        sample_file_ids=list(report.sample_file_ids),
+        overall_status=report.overall_status.value,
+        coverage_score=report.coverage_score,
+        token_mapping_score=report.token_mapping_score,
+        timestamp_quality_score=report.timestamp_quality_score,
+        orderbook_quality_score=report.orderbook_quality_score,
+        price_history_quality_score=report.price_history_quality_score,
+        replay_safety_score=report.replay_safety_score,
+        license_readiness_score=report.license_readiness_score,
+        strengths=list(report.strengths),
+        weaknesses=list(report.weaknesses),
+        questions_for_vendor=list(report.questions_for_vendor),
+        recommendation=report.recommendation,
+        metadata_json=_json_metadata(report.metadata),
+    )
+
+
+def _vendor_evaluation_report_from_record(
+    record: VendorEvaluationReportRecord,
+) -> VendorEvaluationReport:
+    return VendorEvaluationReport(
+        evaluation_report_id=record.evaluation_report_id,
+        vendor_source_id=record.vendor_source_id,
+        created_at=record.created_at,
+        sample_file_ids=list(record.sample_file_ids),
+        overall_status=VendorEvaluationStatus(record.overall_status),
+        coverage_score=record.coverage_score,
+        token_mapping_score=record.token_mapping_score,
+        timestamp_quality_score=record.timestamp_quality_score,
+        orderbook_quality_score=record.orderbook_quality_score,
+        price_history_quality_score=record.price_history_quality_score,
+        replay_safety_score=record.replay_safety_score,
+        license_readiness_score=record.license_readiness_score,
+        strengths=list(record.strengths),
+        weaknesses=list(record.weaknesses),
+        questions_for_vendor=list(record.questions_for_vendor),
+        recommendation=record.recommendation,
+        metadata=_metadata(record.metadata_json),
+    )
 
 
 def _market_universe_definition_to_record(

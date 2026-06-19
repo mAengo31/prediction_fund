@@ -4,9 +4,10 @@ The `prediction-desk` API is an internal research API. It exposes stored predict
 artifacts, deterministic resolution-corpus analysis, deterministic trust-verdict scoring,
 point-in-time replay, canonical market data, fast-lane integrity assessments, contract
 equivalence, equivalence-gated divergence context, pre-trade admissibility,
-simulated-only paper execution, deterministic strategy research, and local-only scenario
-feature imports. It does not trade, place real orders, connect to venues, calculate real
-PnL, or call external APIs.
+simulated-only paper execution, deterministic strategy research, local-only scenario
+feature imports, desk workbench review artifacts, and local-only vendor sample
+evaluation. It does not trade, place real orders, connect to venues, calculate real PnL,
+or call external APIs.
 
 Market and trust-verdict routes are versioned under `/api/v1`. Operational routes remain
 unversioned.
@@ -191,6 +192,18 @@ Common API failures use this envelope:
 | `POST` | `/api/v1/workbench/notes` | Configurable | Create an internal desk review note. |
 | `GET` | `/api/v1/workbench/notes` | Configurable | List desk review notes. |
 | `GET` | `/api/v1/workbench/notes/{note_id}` | Configurable | Read one desk review note. |
+| `POST` | `/api/v1/vendor-data/sources` | Configurable | Register a local vendor dataset source for sample evaluation. |
+| `GET` | `/api/v1/vendor-data/sources` | Configurable | List vendor dataset sources. |
+| `GET` | `/api/v1/vendor-data/sources/{vendor_source_id}` | Configurable | Read one vendor dataset source. |
+| `POST` | `/api/v1/vendor-data/samples/load` | Configurable | Load local vendor sample metadata, hash, row count, and schema summary. URLs are rejected. |
+| `GET` | `/api/v1/vendor-data/samples` | Configurable | List loaded vendor sample file records. |
+| `GET` | `/api/v1/vendor-data/samples/{sample_file_id}` | Configurable | Read one vendor sample file record. |
+| `POST` | `/api/v1/vendor-data/samples/{sample_file_id}/inspect` | Configurable | Inspect likely identifier, timestamp, price, orderbook, trade, and resolution columns. |
+| `POST` | `/api/v1/vendor-data/samples/{sample_file_id}/validate` | Configurable | Validate local sample rows for identifiers, timestamps, prices, duplicates, and point-in-time fields. |
+| `POST` | `/api/v1/vendor-data/samples/{sample_file_id}/dry-run-import` | Configurable | Estimate canonical objects that a later importer could create without persisting market data. |
+| `POST` | `/api/v1/vendor-data/evaluate` | Configurable | Build a vendor evaluation report from inspection, validation, and dry-run outputs. |
+| `GET` | `/api/v1/vendor-data/reports` | Configurable | List vendor evaluation reports. |
+| `GET` | `/api/v1/vendor-data/reports/{evaluation_report_id}` | Configurable | Read one vendor evaluation report. |
 | `POST` | `/api/v1/replay/runs` | Configurable | Run a synchronous point-in-time admissibility replay. |
 | `GET` | `/api/v1/replay/runs/{run_id}` | Configurable | Stored replay run metadata. |
 | `GET` | `/api/v1/replay/runs/{run_id}/steps` | Configurable | Paginated replay steps. |

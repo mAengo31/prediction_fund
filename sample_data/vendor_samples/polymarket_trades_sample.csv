@@ -1,0 +1,3 @@
+timestamp,condition_id,question_id,gamma_market_id,asset_id,token_id,trade_id,transaction_hash,price,size,maker,taker,side,observed_at,captured_at,available_at
+2026-06-18T08:03:00Z,0xcondgood001,0xquestiongood001,123456,1001,1001,trade_001,0xtx001,0.44,20.0,0xmaker,0xtaker,buy,2026-06-18T08:03:00Z,2026-06-18T08:03:03Z,2026-06-18T08:03:03Z
+2026-06-18T08:04:00Z,0xcondgood001,0xquestiongood001,123456,1002,1002,trade_002,0xtx002,0.56,18.0,0xmaker2,0xtaker2,sell,2026-06-18T08:04:00Z,2026-06-18T08:04:04Z,2026-06-18T08:04:04Z
