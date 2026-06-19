@@ -15,7 +15,9 @@ collection plans, historical backfill records, coverage reports, and gap detecti
 The desk workbench endpoints add review queues, decision cards, comparison cards, and
 desk notes over stored evidence. Queue history is append-only, while latest queue and
 summary endpoints provide the active deduplicated desk view. They do not add execution
-authority.
+authority. Vendor-data endpoints add local-file sample inspection, validation, dry-run
+import estimates, and evaluation reports only; they do not call vendor APIs or write
+vendor samples into canonical market-data tables.
 
 It is not a trading system. This deployment surface intentionally includes no live trading,
 no venue credentials, no private keys, no wallets, and no order placement.

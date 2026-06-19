@@ -484,6 +484,36 @@ az consumption budget create \
 Do not increase public-read scope, app replicas, or scheduled job cadence until those
 alerts are visible in Azure Cost Management.
 
+## Vendor Data Evaluation Validation
+
+Vendor Dataset Intake + Evaluation Scaffold v1 is deployed on Azure staging as of image
+`predictiondesk3bbbab44cusacr.azurecr.io/prediction-desk:f89c5ca`, Container App
+revision `prediction-desk-staging-api--0000016`. Azure Postgres is migrated through
+Alembic revision `20260619_0016`.
+
+The synthetic packaged samples were evaluated through `/api/v1/vendor-data/*` using local
+paths inside the container image:
+
+- `sample_data/vendor_samples/polymarket_price_history_sample.csv`
+- `sample_data/vendor_samples/polymarket_orderbook_sample.jsonl`
+- `sample_data/vendor_samples/polymarket_trades_sample.csv`
+- `sample_data/vendor_samples/bad_missing_token_sample.csv`
+
+Validated staging results:
+
+- source: `vendor_source_synthetic_polymarket_vendor_sample_eval_v1_dd348c45279c7128`
+- good-sample evaluation: `PROMISING`
+- bad-included evaluation: `NEEDS_CLARIFICATION`
+- vendor dataset sources: 1
+- vendor sample files: 4
+- schema inspections: 4
+- validation reports: 4
+- dry runs: 8
+- evaluation reports: 2
+
+This path remains local-file only and dry-run only. It does not call vendor APIs, does not
+use credentials, and does not write vendor rows into canonical market-data tables.
+
 ## Backup Guidance
 
 The Bicep template sets PostgreSQL backup retention to 7 days by default. Confirm backups

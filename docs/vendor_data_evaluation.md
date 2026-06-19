@@ -165,6 +165,34 @@ Synthetic samples live in `sample_data/vendor_samples/`:
 
 The bad sample exists to verify rejection and warning paths.
 
+## Azure Staging Validation
+
+Azure staging validation for v1 used the synthetic samples packaged in the container
+image, not external vendor APIs. The staging API was deployed as
+`prediction-desk:f89c5ca`, and Azure Postgres was migrated through `20260619_0016`.
+
+The validated synthetic source was:
+
+`vendor_source_synthetic_polymarket_vendor_sample_eval_v1_dd348c45279c7128`
+
+The three good samples produced a `PROMISING` evaluation report with usable token/asset
+identifiers, orderbook-like rows, probability-style price history, and replay-safe
+timestamp fields. The report including `bad_missing_token_sample.csv` produced
+`NEEDS_CLARIFICATION`, with missing token identifiers, out-of-range prices, unparseable
+timestamps, and point-in-time questions.
+
+The dry-run path produced vendor artifacts only:
+
+- vendor dataset sources
+- vendor sample files
+- schema inspections
+- validation reports
+- import dry runs
+- evaluation reports
+
+It did not create canonical markets, orderbooks, price snapshots, liquidity snapshots, or
+quality reports from vendor sample rows.
+
 ## Decision Use
 
 Evaluation reports should guide vendor outreach and sample requests. A promising sample
