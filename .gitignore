@@ -13,3 +13,4 @@ build/
 prediction_desk.db
 *.sqlite
 *.sqlite3
+data/vendor_samples/

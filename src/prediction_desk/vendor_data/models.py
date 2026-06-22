@@ -142,13 +142,61 @@ class VendorSampleLoadRequest(VendorDataModel):
     vendor_source_id: str
     file_path: str
     max_size_mb: int = Field(default=100, gt=0, le=10_000)
+    max_rows: int | None = Field(default=None, gt=0)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class VendorDryRunImportRequest(VendorDataModel):
     sample_kind: VendorSampleKind | None = None
+    mapping_config_path: str | None = None
+    max_rows: int | None = Field(default=None, gt=0)
 
 
 class VendorEvaluateRequest(VendorDataModel):
     vendor_source_id: str
     sample_file_ids: list[str] = Field(default_factory=list)
+    mapping_config_path: str | None = None
+
+
+class VendorSchemaMappingConfig(VendorDataModel):
+    mapping_name: str
+    vendor_name: str
+    dataset_name: str
+    sample_kind: VendorSampleKind
+    market_id_column: str | None = None
+    condition_id_column: str | None = None
+    question_id_column: str | None = None
+    gamma_market_id_column: str | None = None
+    slug_column: str | None = None
+    token_id_column: str | None = None
+    asset_id_column: str | None = None
+    timestamp_columns: dict[str, str] = Field(default_factory=dict)
+    observed_at_column: str | None = None
+    captured_at_column: str | None = None
+    available_at_column: str | None = None
+    market_start_column: str | None = None
+    elapsed_seconds_column: str | None = None
+    price_columns: dict[str, str] = Field(default_factory=dict)
+    quote_columns: dict[str, str] = Field(default_factory=dict)
+    orderbook_columns: dict[str, str] = Field(default_factory=dict)
+    trade_columns: dict[str, str] = Field(default_factory=dict)
+    resolution_columns: dict[str, str] = Field(default_factory=dict)
+    feature_columns: dict[str, str] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("mapping_name", "vendor_name", "dataset_name")
+    @classmethod
+    def _require_mapping_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("value required")
+        return value.strip()
+
+
+class VendorSampleInspectRequest(VendorDataModel):
+    mapping_config_path: str | None = None
+    max_rows: int | None = Field(default=None, gt=0)
+
+
+class VendorSampleValidateRequest(VendorDataModel):
+    mapping_config_path: str | None = None
+    max_rows: int | None = Field(default=None, gt=0)

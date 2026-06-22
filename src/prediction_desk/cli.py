@@ -77,7 +77,9 @@ from prediction_desk.vendor_data.models import (
     VendorDatasetSourceCreate,
     VendorDryRunImportRequest,
     VendorEvaluateRequest,
+    VendorSampleInspectRequest,
     VendorSampleLoadRequest,
+    VendorSampleValidateRequest,
 )
 from prediction_desk.vendor_data.service import VendorDataService, VendorDataServiceError
 from prediction_desk.workbench.enums import (
@@ -4109,6 +4111,10 @@ def vendor_load_sample_command(
     max_size_mb: Annotated[
         int, typer.Option("--max-size-mb", help="Maximum sample file size in MB.")
     ] = 100,
+    max_rows: Annotated[
+        int | None,
+        typer.Option("--max-rows", help="Maximum rows to sample from the file."),
+    ] = None,
     database_url: Annotated[
         str | None, typer.Option("--database-url", help="Database URL to write.")
     ] = None,
@@ -4119,6 +4125,7 @@ def vendor_load_sample_command(
         vendor_source_id=vendor_source_id,
         file_path=file_path,
         max_size_mb=max_size_mb,
+        max_rows=max_rows,
     )
     engine = build_engine(database_url)
     session_factory = build_session_factory(engine)
@@ -4129,12 +4136,13 @@ def vendor_load_sample_command(
             typer.echo(exc.code, err=True)
             raise typer.Exit(1) from exc
     _print_table(
-        headers=("sample_file_id", "file_type", "rows", "file_hash"),
+        headers=("sample_file_id", "file_type", "rows", "sampled", "file_hash"),
         rows=[
             (
                 sample.sample_file_id,
                 sample.file_type.value,
                 sample.row_count or 0,
+                sample.metadata.get("sample_limit_applied", False),
                 sample.file_hash,
             )
         ],
@@ -4146,6 +4154,14 @@ def vendor_inspect_sample_command(
     sample_file_id: Annotated[
         str, typer.Option("--sample-file-id", help="Vendor sample file ID.")
     ],
+    mapping_config: Annotated[
+        str | None,
+        typer.Option("--mapping-config", help="Local JSON vendor schema mapping config."),
+    ] = None,
+    max_rows: Annotated[
+        int | None,
+        typer.Option("--max-rows", help="Maximum rows to inspect from the sample."),
+    ] = None,
     database_url: Annotated[
         str | None, typer.Option("--database-url", help="Database URL to write.")
     ] = None,
@@ -4157,7 +4173,11 @@ def vendor_inspect_sample_command(
     with session_factory.begin() as session:
         try:
             inspection = VendorDataService(PredictionMarketRepository(session)).inspect_sample(
-                sample_file_id
+                sample_file_id,
+                VendorSampleInspectRequest(
+                    mapping_config_path=mapping_config,
+                    max_rows=max_rows,
+                ),
             )
         except VendorDataServiceError as exc:
             typer.echo(exc.code, err=True)
@@ -4180,6 +4200,14 @@ def vendor_validate_sample_command(
     sample_file_id: Annotated[
         str, typer.Option("--sample-file-id", help="Vendor sample file ID.")
     ],
+    mapping_config: Annotated[
+        str | None,
+        typer.Option("--mapping-config", help="Local JSON vendor schema mapping config."),
+    ] = None,
+    max_rows: Annotated[
+        int | None,
+        typer.Option("--max-rows", help="Maximum rows to validate from the sample."),
+    ] = None,
     database_url: Annotated[
         str | None, typer.Option("--database-url", help="Database URL to write.")
     ] = None,
@@ -4191,7 +4219,11 @@ def vendor_validate_sample_command(
     with session_factory.begin() as session:
         try:
             report = VendorDataService(PredictionMarketRepository(session)).validate_sample(
-                sample_file_id
+                sample_file_id,
+                VendorSampleValidateRequest(
+                    mapping_config_path=mapping_config,
+                    max_rows=max_rows,
+                ),
             )
         except VendorDataServiceError as exc:
             typer.echo(exc.code, err=True)
@@ -4219,6 +4251,14 @@ def vendor_dry_run_import_command(
         VendorSampleKind | None,
         typer.Option("--sample-kind", help="market_data/orderbook/trades/price_history/mixed."),
     ] = None,
+    mapping_config: Annotated[
+        str | None,
+        typer.Option("--mapping-config", help="Local JSON vendor schema mapping config."),
+    ] = None,
+    max_rows: Annotated[
+        int | None,
+        typer.Option("--max-rows", help="Maximum rows to dry-run from the sample."),
+    ] = None,
     database_url: Annotated[
         str | None, typer.Option("--database-url", help="Database URL to write.")
     ] = None,
@@ -4231,7 +4271,11 @@ def vendor_dry_run_import_command(
         try:
             dry_run = VendorDataService(PredictionMarketRepository(session)).dry_run_import(
                 sample_file_id,
-                VendorDryRunImportRequest(sample_kind=sample_kind),
+                VendorDryRunImportRequest(
+                    sample_kind=sample_kind,
+                    mapping_config_path=mapping_config,
+                    max_rows=max_rows,
+                ),
             )
         except VendorDataServiceError as exc:
             typer.echo(exc.code, err=True)
@@ -4260,6 +4304,10 @@ def vendor_evaluate_command(
         list[str] | None,
         typer.Option("--sample-file-id", help="Sample file ID; repeatable."),
     ] = None,
+    mapping_config: Annotated[
+        str | None,
+        typer.Option("--mapping-config", help="Local JSON vendor schema mapping config."),
+    ] = None,
     database_url: Annotated[
         str | None, typer.Option("--database-url", help="Database URL to write.")
     ] = None,
@@ -4269,6 +4317,7 @@ def vendor_evaluate_command(
     request = VendorEvaluateRequest(
         vendor_source_id=vendor_source_id,
         sample_file_ids=list(sample_file_id or []),
+        mapping_config_path=mapping_config,
     )
     engine = build_engine(database_url)
     session_factory = build_session_factory(engine)

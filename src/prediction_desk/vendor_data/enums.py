@@ -45,4 +45,6 @@ class VendorSampleKind(StrEnum):
     ORDERBOOK = "orderbook"
     TRADES = "trades"
     PRICE_HISTORY = "price_history"
+    TOP_OF_BOOK_QUOTES = "top_of_book_quotes"
+    BINARY_TOP_OF_BOOK_QUOTES = "binary_top_of_book_quotes"
     MIXED = "mixed"

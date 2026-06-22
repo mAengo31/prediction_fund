@@ -1,78 +1,100 @@
 # prediction-desk
 
-`prediction-desk` is an institutional-grade prediction-market quant research system.
-The focus is point-in-time, reproducible analysis: market rules, prices, scores, and
-verdicts are represented as replayable snapshots.
+`prediction-desk` is a prediction-market research and operations platform for
+point-in-time analysis, data quality review, replay, simulated execution, and desk-facing
+decision support.
 
-## What This Round Implements
+It is intentionally **not** a live trading system. The repository contains no live order
+placement, no order cancellation, no wallets, no private keys, no venue trading
+credentials, no real account IDs, and no execution adapters.
 
-- Typed Pydantic v2 domain models for venues, events, markets, outcomes, rule snapshots,
-  order book snapshots, trade prints, resolution events, and trust verdicts.
-- Deterministic rule hashing with SHA-256.
-- Resolution Corpus v1 for deterministic parsing of rule language, ambiguity scoring,
-  evidence spans, and rule snapshot diffs.
-- Point-in-Time Replay Harness v1 for admissibility replay using only snapshots available
-  at or before each replay timestamp.
-- Read-only Kalshi and Polymarket fixture ingestion that archives raw public-shape payloads
-  before deterministic normalization.
-- Canonical Market Data v1 for orderbook-derived price/liquidity snapshots,
-  price-history normalization, data-quality reports, and run-once ingestion scheduling.
-- Fast-Lane Integrity Signals v1 for deterministic point-in-time market-integrity
-  features, signals, assessments, and integrity-gated replay policy evaluation.
-- Cross-Venue Equivalence Engine v1 for deterministic contract comparison before any
-  cross-venue research comparison.
-- Cross-Venue Divergence Signals v1 for deterministic, equivalence-gated price divergence
-  context across comparable contracts.
-- Pre-Trade Gate v1 for deterministic admissibility decisions over hypothetical trade
-  intents using as-of trust, resolution, market-data, integrity, equivalence, divergence,
-  restriction, and abstract exposure context.
-- Paper Execution Simulator v1 for clearly labeled simulated orders, fills, ledger,
-  position, and portfolio snapshots gated by pre-trade approval and as-of market data.
-- Strategy Research Harness v1 for deterministic hypothesis testing, research signals,
-  hypothetical intent proposals, pre-trade evaluation, optional paper simulation, and
-  simulated attribution summaries.
-- Slow-Lane Scenario Feature Interface v1 for fixture-backed MiroFish-style report import,
-  scenario seed bundles, normalized scenario feature snapshots, and research/replay
-  metadata exposure.
-- Data Scale / Historical Backfill / Read-Only Collection Orchestrator v1 for market
-  universes, collection plans, run-once fixture collection, historical backfill records,
-  coverage reports, and data-gap detection.
-- Desk Decision Workbench v1 for append-only review queues, latest active queue views,
-  market decision cards, cross-venue comparison cards, data-gap/pre-trade/paper/research
-  summaries, and desk review notes.
-- Vendor Dataset Intake + Evaluation Scaffold v1 for local-only vendor sample loading,
-  schema inspection, identifier/timestamp validation, dry-run canonical import estimates,
-  and vendor evaluation reports.
-- A deterministic v0 resolution-risk scorer.
-- A deterministic v0 trust-verdict builder.
-- SQLAlchemy 2.0 ORM mappings and repository methods for local persistence.
-- Alembic initial migration.
-- SQLite default configuration with schema choices that remain Postgres-compatible.
-- Typer CLI commands for local setup, sample data, and sample scoring.
-- Internal FastAPI service for reading stored markets and recomputing deterministic
-  trust verdicts from stored snapshots.
-- Dockerfile, Docker Compose Postgres, and GitHub Actions CI.
-- Pytest coverage for domain validation, scoring, verdict actions, and persistence roundtrips.
+## Current Status
 
-## Intentionally Out Of Scope
+The project currently supports:
 
-This is not a trading bot. This round intentionally excludes:
+- canonical prediction-market domain models
+- SQLAlchemy persistence and Alembic migrations through `20260619_0016`
+- internal FastAPI API with bearer-token auth support
+- Docker and Postgres local deployment
+- Azure Container Apps staging deployment path
+- Azure PostgreSQL Flexible Server persistence
+- fixture-only Azure scheduling
+- read-only Kalshi public-read validation
+- token-aware Polymarket public-read validation
+- Polymarket CLOB orderbook and price-history ingestion
+- canonical market data snapshots and data-quality reports
+- resolution corpus and rule ambiguity analysis
+- point-in-time replay harness
+- integrity signals
+- cross-venue equivalence engine
+- cross-venue divergence signals
+- pre-trade admissibility gate for hypothetical intents
+- simulated-only paper execution
+- deterministic strategy research harness
+- slow-lane scenario feature interface
+- DataOps universes, collection plans, coverage, gaps, and backfill records
+- desk decision workbench with queues, cards, notes, and status summaries
+- vendor dataset intake and dry-run evaluation scaffold
+- vendor schema mapping configs
+- large-file vendor sampling for CSV, JSONL, and Parquet
 
-- Live exchange connectivity.
-- External API calls.
-- Real order placement.
-- Wallets, private keys, custody, or signing.
-- API credentials or exchange secrets.
-- Execution algorithms.
-- Public trading or execution services.
-- LLM calls for rule parsing.
-- Autonomous scenario simulation.
-- Real PnL calculation or unlabeled/fabricated performance metrics.
-- Production alpha models or live strategy automation.
-- Authenticated venue endpoints or venue credentials.
-- Vendor API credentials or automatic vendor API pulls.
+## Safety Boundary
 
-## Setup
+These boundaries are deliberate and should not be weakened casually:
+
+- No live trading.
+- No order routing.
+- No venue trading credentials.
+- No authenticated venue trading endpoints.
+- No wallets or private keys.
+- No real account IDs.
+- No execution adapters.
+- No public-read collection schedule.
+- No vendor API pulls.
+- No canonical writes from vendor samples.
+- No LLM calls in core analysis paths.
+- No MiroFish runtime execution.
+
+Fixture collection may be scheduled. Public-read collection remains manual and explicitly
+gated. Vendor data evaluation remains local-file and dry-run only.
+
+## Repository Layout
+
+```text
+src/prediction_desk/
+  api/             FastAPI app, auth, routes, schemas
+  dataops/         universes, collection plans, coverage, gaps, backfill
+  divergence/      equivalence-gated cross-venue divergence context
+  domain/          canonical market, event, outcome, rule, venue models
+  equivalence/     contract comparison and comparable-market grouping
+  ingestion/       read-only fixture/public payload ingestion
+  integrity/       deterministic market integrity features/signals
+  marketdata/      orderbook, price, liquidity, and quality reports
+  paper/           simulated-only orders, fills, ledger, portfolio
+  persistence/     SQLAlchemy ORM, repositories, database setup
+  pretrade/        hypothetical-intent admissibility checks
+  replay/          point-in-time replay harness
+  research/        deterministic research features/signals/proposals
+  resolution/      rule parsing, ambiguity, diffs
+  scenario/        fixture-backed slow-lane scenario features
+  scoring/         trust and resolution-risk scoring
+  vendor_data/     local vendor sample inspection, validation, dry-run evaluation
+  workbench/       review queues, decision cards, comparison cards, notes
+
+docs/              subsystem and operations documentation
+sample_data/       tiny committed fixtures and mapping configs
+scripts/           local, Docker, staging, Azure, and smoke helpers
+deploy/azure/      Azure staging infrastructure docs/templates
+alembic/           migrations
+tests/             unit, API, CLI, and integration tests
+```
+
+Downloaded vendor files belong under `data/vendor_samples/`, which is ignored by git.
+Do not commit paid or downloaded vendor datasets.
+
+## Quickstart
+
+Use Python 3.12+.
 
 ```bash
 python3.12 -m venv .venv
@@ -80,395 +102,54 @@ source .venv/bin/activate
 python -m pip install -e ".[dev]"
 ```
 
-## Test And Quality Commands
-
-```bash
-pytest
-ruff check .
-mypy
-```
-
-CI runs on pull requests and pushes to `main`. It installs the package on Python 3.12,
-runs ruff, mypy, pytest, and verifies the Alembic migration against SQLite. A separate
-`postgres-integration` CI job starts Postgres, runs Alembic against Postgres, and runs
-the tests marked `postgres`.
-
-## CLI Examples
-
-Initialize the default local SQLite database:
-
-```bash
-prediction-desk init-db
-```
-
-Load deterministic sample markets:
-
-```bash
-prediction-desk load-sample-data
-```
-
-Score the sample markets and print a compact table:
-
-```bash
-prediction-desk score-sample-markets
-```
-
-Analyze latest rules into the resolution corpus:
-
-```bash
-prediction-desk analyze-rules --all
-prediction-desk analyze-rules --market-id mkt_sfo_rain_2026_09_01
-```
-
-Diff the latest two rule snapshots for the rule-change fixture:
-
-```bash
-prediction-desk diff-rule-snapshots --market-id mkt_rate_cut_rule_change_2026
-```
-
-Run a small point-in-time replay:
-
-```bash
-prediction-desk replay-run \
-  --policy trust_verdict_v1 \
-  --start 2026-06-16T12:00:00+00:00 \
-  --end 2026-06-16T13:00:00+00:00 \
-  --interval-seconds 3600 \
-  --market-id mkt_cpi_yoy_at_least_3pct_2026_09 \
-  --max-steps 10
-
-prediction-desk replay-summary --run-id replay_run_...
-prediction-desk replay-steps --run-id replay_run_... --limit 50
-```
-
-Ingest committed read-only venue fixtures:
-
-```bash
-prediction-desk ingest-fixtures --venue kalshi
-prediction-desk ingest-fixtures --venue polymarket
-prediction-desk ingestion-runs
-prediction-desk venue-mappings
-```
-
-Run one fixture ingestion job with market-data derivation and quality reports:
-
-```bash
-prediction-desk ingestion-run-once --venue kalshi
-prediction-desk ingestion-cursors
-```
-
-Derive and inspect canonical market data:
-
-```bash
-prediction-desk market-data-derive --all
-prediction-desk market-data-latest --market-id kalshi_market_kxweather_nyc_rain_20260930
-prediction-desk market-data-prices --market-id kalshi_market_kxweather_nyc_rain_20260930
-prediction-desk data-quality --market-id kalshi_market_kxweather_nyc_rain_20260930
-```
-
-Build desk review queues and decision cards:
-
-```bash
-prediction-desk workbench-build-queue --market-id mkt_cpi_yoy_at_least_3pct_2026_09
-prediction-desk workbench-queue --latest
-prediction-desk workbench-queue-summary
-prediction-desk workbench-status
-prediction-desk workbench-card --market-id mkt_cpi_yoy_at_least_3pct_2026_09
-prediction-desk workbench-add-note \
-  --market-id mkt_cpi_yoy_at_least_3pct_2026_09 \
-  --text "Reviewed latest data quality and pre-trade context."
-prediction-desk workbench-update-item-status \
-  --queue-item-id queue_item_... \
-  --review-status WATCHING \
-  --reviewed-by operator \
-  --review-outcome NEEDS_MORE_DATA \
-  --review-reason "Keep in daily review until the next fixture cycle."
-```
-
-Analyze fast-lane integrity signals:
-
-```bash
-prediction-desk integrity-analyze --market-id kalshi_market_kxweather_nyc_rain_20260930
-prediction-desk integrity-run \
-  --asof 2026-06-16T12:45:00Z \
-  --market-id kalshi_market_kxweather_nyc_rain_20260930 \
-  --max-steps 10
-prediction-desk integrity-latest --market-id kalshi_market_kxweather_nyc_rain_20260930
-prediction-desk integrity-signals --market-id kalshi_market_kxweather_nyc_rain_20260930
-```
-
-Assess cross-venue contract equivalence:
-
-```bash
-prediction-desk ingestion-run-once --venue kalshi
-prediction-desk ingestion-run-once --venue polymarket
-prediction-desk equivalence-candidates \
-  --market-id kalshi_market_kxweather_nyc_rain_20260930 \
-  --market-id polymarket_market_0xrainnycsep2026 \
-  --asof 2026-06-16T12:45:00Z
-prediction-desk equivalence-assess \
-  --left-market-id kalshi_market_kxweather_nyc_rain_20260930 \
-  --right-market-id polymarket_market_0xrainnycsep2026 \
-  --asof 2026-06-16T12:45:00Z
-prediction-desk equivalence-run \
-  --asof 2026-06-16T12:45:00Z \
-  --market-id kalshi_market_kxweather_nyc_rain_20260930 \
-  --market-id polymarket_market_0xrainnycsep2026 \
-  --max-pairs 10
-prediction-desk equivalence-classes
-```
-
-Analyze equivalence-gated divergence context:
-
-```bash
-prediction-desk divergence-analyze \
-  --market-id kalshi_market_kxweather_nyc_rain_20260930 \
-  --asof 2026-06-16T12:20:00Z
-prediction-desk divergence-run \
-  --asof 2026-06-16T12:20:00Z \
-  --market-id kalshi_market_kxweather_nyc_rain_20260930 \
-  --max-pairs 10
-prediction-desk divergence-latest --market-id kalshi_market_kxweather_nyc_rain_20260930
-prediction-desk divergence-signals --market-id kalshi_market_kxweather_nyc_rain_20260930
-```
-
-Evaluate pre-trade admissibility for a hypothetical research intent:
-
-```bash
-prediction-desk pretrade-create-default-policy
-prediction-desk pretrade-check \
-  --market-id kalshi_market_kxweather_nyc_rain_20260930 \
-  --strategy-context RESEARCH \
-  --intent-type RESEARCH_ONLY \
-  --requested-size-units 1
-prediction-desk pretrade-run \
-  --market-id kalshi_market_kxweather_nyc_rain_20260930 \
-  --asof 2026-06-16T12:20:00Z \
-  --max-checks 10
-prediction-desk pretrade-latest --market-id kalshi_market_kxweather_nyc_rain_20260930
-```
-
-Run simulated-only paper execution:
-
-```bash
-prediction-desk paper-create-default-policy
-prediction-desk paper-simulate-intent \
-  --market-id mkt_cpi_yoy_at_least_3pct_2026_09 \
-  --asof 2026-06-16T12:00:00+00:00 \
-  --intent-type AGGRESSIVE_LIMIT \
-  --requested-price 0.52
-prediction-desk paper-position-latest --market-id mkt_cpi_yoy_at_least_3pct_2026_09
-prediction-desk paper-portfolio-latest
-```
-
-Run deterministic strategy research:
-
-```bash
-prediction-desk research-create-default-strategies
-prediction-desk research-build-features \
-  --market-id mkt_cpi_yoy_at_least_3pct_2026_09 \
-  --asof 2026-06-16T12:00:00+00:00
-prediction-desk research-generate-signals \
-  --market-id mkt_cpi_yoy_at_least_3pct_2026_09 \
-  --asof 2026-06-16T12:00:00+00:00
-prediction-desk research-generate-proposals \
-  --market-id mkt_cpi_yoy_at_least_3pct_2026_09 \
-  --strategy-id research_strategy_baseline_research_only_v1 \
-  --asof 2026-06-16T12:00:00+00:00
-prediction-desk research-run \
-  --market-id mkt_cpi_yoy_at_least_3pct_2026_09 \
-  --strategy-id research_strategy_baseline_research_only_v1 \
-  --start 2026-06-16T12:00:00+00:00 \
-  --end 2026-06-16T12:00:00+00:00 \
-  --max-steps 10 \
-  --max-proposals 10 \
-  --no-paper-simulation
-```
-
-Import slow-lane scenario features:
-
-```bash
-prediction-desk scenario-build-seed \
-  --market-id mkt_sfo_rain_2026_09_01 \
-  --asof 2026-06-16T12:00:00+00:00
-prediction-desk scenario-import-fixtures \
-  --market-id mkt_sfo_rain_2026_09_01 \
-  --asof 2026-06-16T12:00:00+00:00
-prediction-desk scenario-latest --market-id mkt_sfo_rain_2026_09_01
-prediction-desk scenario-run \
-  --market-id mkt_sfo_rain_2026_09_01 \
-  --asof 2026-06-16T12:00:00+00:00
-```
-
-Run read-only data scaling checks:
-
-```bash
-prediction-desk dataops-defaults
-prediction-desk dataops-universes
-prediction-desk dataops-collection-plans
-prediction-desk dataops-run-collection --venue kalshi --mode FIXTURE
-prediction-desk dataops-coverage --scope-type GLOBAL
-prediction-desk dataops-gaps
-prediction-desk dataops-cycle --mode FIXTURE
-```
-
-Manual public sampling is opt-in and read-only:
-
-```bash
-prediction-desk dataops-run-collection \
-  --venue kalshi \
-  --mode MANUAL_PUBLIC_FETCH \
-  --allow-network \
-  --max-payloads 5
-```
-
-Target an existing public-read market for detail and orderbook follow-up:
-
-```bash
-prediction-desk dataops-run-collection \
-  --venue kalshi \
-  --mode MANUAL_PUBLIC_FETCH \
-  --allow-network \
-  --endpoint-type MARKET_DETAIL \
-  --endpoint-type ORDERBOOK \
-  --market-id kalshi_market_... \
-  --max-payloads 5
-```
-
-Polymarket targeted follow-up is token-aware. It requires prior catalog/detail ingestion
-that persisted Gamma and CLOB token identifiers:
-
-```bash
-prediction-desk dataops-run-collection \
-  --venue polymarket \
-  --mode MANUAL_PUBLIC_FETCH \
-  --allow-network \
-  --endpoint-type MARKET_DETAIL \
-  --endpoint-type ORDERBOOK \
-  --endpoint-type PRICE_HISTORY \
-  --market-id polymarket_market_... \
-  --max-payloads 5
-```
-
-Public-read collection remains manual and unscheduled. No venue credentials are accepted.
-
-Evaluate local vendor data samples without importing canonical market data:
-
-```bash
-prediction-desk vendor-register-source \
-  --vendor-name SampleVendor \
-  --dataset-name "Polymarket history" \
-  --dataset-version sample-v1 \
-  --license-status SAMPLE_ONLY
-prediction-desk vendor-load-sample \
-  --vendor-source-id vendor_source_... \
-  --file-path sample_data/vendor_samples/polymarket_orderbook_sample.jsonl
-prediction-desk vendor-inspect-sample --sample-file-id vendor_sample_...
-prediction-desk vendor-validate-sample --sample-file-id vendor_sample_...
-prediction-desk vendor-dry-run-import \
-  --sample-file-id vendor_sample_... \
-  --sample-kind orderbook
-prediction-desk vendor-evaluate \
-  --vendor-source-id vendor_source_... \
-  --sample-file-id vendor_sample_...
-prediction-desk vendor-reports --vendor-source-id vendor_source_...
-```
-
-Vendor evaluation is local-file only. It does not call vendor APIs, accept vendor
-credentials, or write canonical market data in v1. See
-[docs/vendor_data_evaluation.md](docs/vendor_data_evaluation.md).
-
-Use a custom database URL:
-
-```bash
-prediction-desk init-db --database-url sqlite:///local_research.db
-```
-
-## API Service
-
-Run the internal API locally against the default SQLite database:
+Initialize the default local SQLite database and load deterministic fixtures:
 
 ```bash
 prediction-desk init-db
 prediction-desk load-sample-data
+```
+
+Run the local API:
+
+```bash
 scripts/run_api.sh
 ```
 
-Useful local endpoints:
+Check health:
 
 ```bash
 curl http://localhost:8000/healthz
 curl http://localhost:8000/readyz
 curl http://localhost:8000/api/v1/markets
-curl -X POST \
-  http://localhost:8000/api/v1/markets/mkt_sfo_rain_2026_09_01/resolution/analyze-latest
-curl -X POST \
-  http://localhost:8000/api/v1/markets/mkt_rate_cut_rule_change_2026/rule-snapshots/diff-latest
-curl -X POST \
-  http://localhost:8000/api/v1/markets/mkt_sfo_rain_2026_09_01/trust-verdicts/recompute
-curl -X POST \
-  http://localhost:8000/api/v1/replay/runs \
-  -H "Content-Type: application/json" \
-  -d '{"name":"sample replay","policy_name":"trust_verdict_v1","start_time":"2026-06-16T12:00:00Z","end_time":"2026-06-16T13:00:00Z","interval_seconds":3600,"market_ids":["mkt_cpi_yoy_at_least_3pct_2026_09"],"max_steps":10,"persist_steps":true,"force_recompute_verdicts":true,"metadata":{}}'
-curl -X POST \
-  http://localhost:8000/api/v1/ingestion/fixtures/kalshi \
-  -H "Content-Type: application/json" \
-  -d '{"fixture_dir":null,"captured_at":null,"analyze_rules":true,"recompute_verdicts":true}'
-curl -X POST \
-  http://localhost:8000/api/v1/ingestion/run-once \
-  -H "Content-Type: application/json" \
-  -d '{"venue_name":"kalshi","mode":"fixture","limit":10,"allow_network":false,"analyze_rules":true,"recompute_verdicts":true,"derive_market_data":true,"compute_quality":true,"metadata":{}}'
-curl \
-  http://localhost:8000/api/v1/markets/kalshi_market_kxweather_nyc_rain_20260930/market-data/latest
-curl -X POST \
-  http://localhost:8000/api/v1/markets/kalshi_market_kxweather_nyc_rain_20260930/integrity/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"asof_timestamp":"2026-06-16T12:45:00Z","force":false,"thresholds":{}}'
-curl -X POST \
-  http://localhost:8000/api/v1/equivalence/assess \
-  -H "Content-Type: application/json" \
-  -d '{"left_market_id":"kalshi_market_kxweather_nyc_rain_20260930","right_market_id":"polymarket_market_0xrainnycsep2026","asof_timestamp":"2026-06-16T12:45:00Z","force":false,"config":{}}'
-curl -X POST \
-  http://localhost:8000/api/v1/divergence/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"market_id":"kalshi_market_kxweather_nyc_rain_20260930","asof_timestamp":"2026-06-16T12:20:00Z","force":false,"config":{}}'
-curl -X POST \
-  http://localhost:8000/api/v1/pretrade/check \
-  -H "Content-Type: application/json" \
-  -d '{"market_id":"kalshi_market_kxweather_nyc_rain_20260930","strategy_context":"RESEARCH","side":"BUY","intent_type":"RESEARCH_ONLY","requested_size_units":"1","asof_timestamp":"2026-06-16T12:20:00Z","metadata":{}}'
 ```
 
-Authentication is controlled by `REQUIRE_API_TOKEN` and `PREDICTION_DESK_API_TOKEN`.
-`/healthz` is always public. In staging and production, set `REQUIRE_API_TOKEN=true`.
-Azure staging uses `scripts/azure_staging_smoke.sh`,
-`scripts/azure_migrate_and_verify.sh`, and `scripts/azure_inspect_counts.sh`. The
-public-read pilot remains manual and requires `CONFIRM_PUBLIC_READ_ONLY=true` before
-`scripts/staging_public_read_pilot.sh` will run.
+## Quality Gates
 
-See [docs/api.md](docs/api.md) for endpoint details and
-[docs/resolution_corpus.md](docs/resolution_corpus.md) for rule-analysis details. See
-[docs/replay.md](docs/replay.md) for point-in-time replay details and
-[docs/ingestion.md](docs/ingestion.md) for read-only venue ingestion details. See
-[docs/market_data.md](docs/market_data.md) for canonical market-data snapshots,
-data-quality reports, timestamp semantics, and run-once scheduling. See
-[docs/integrity_signals.md](docs/integrity_signals.md) for fast-lane integrity features,
-signals, assessments, trust-verdict integration, and integrity-gated replay. See
-[docs/equivalence.md](docs/equivalence.md) for cross-venue contract comparison,
-outcome mappings, comparison permissions, and equivalence run-once scans. See
-[docs/divergence_signals.md](docs/divergence_signals.md) for equivalence-gated
-cross-venue divergence context. See [docs/pretrade_gate.md](docs/pretrade_gate.md) for
-intent-only admissibility checks and abstract exposure gating. See
-[docs/paper_execution.md](docs/paper_execution.md) for simulated-only paper execution. See
-[docs/scenario_features.md](docs/scenario_features.md) for fixture-backed slow-lane
-scenario features and research/replay metadata. See [docs/data_scaling.md](docs/data_scaling.md)
-for market universes, collection plans, backfill jobs, coverage reports, and gap detection.
-See [docs/staging_dataops_pilot.md](docs/staging_dataops_pilot.md) for staging smoke,
-public-read pilot, database inspection, coverage/gap readback, and rollback guidance. See
-[docs/azure_staging.md](docs/azure_staging.md) and
-[docs/staging_deployment.md](docs/staging_deployment.md) for the Azure staging deployment
-packet.
+Run the standard local validation suite:
 
-## Docker Compose Quickstart
+```bash
+python -m pytest
+python -m ruff check .
+python -m mypy
+git diff --check
+DATABASE_URL=sqlite:////tmp/prediction_desk_migration_check.db scripts/migrate.sh
+docker compose config
+```
+
+Optional Docker smoke:
+
+```bash
+scripts/smoke_docker.sh
+```
+
+Optional Postgres tests, when local Postgres is available:
+
+```bash
+TEST_DATABASE_URL=postgresql+psycopg://prediction_desk:prediction_desk@localhost:55432/prediction_desk \
+  python -m pytest -m postgres
+```
+
+## Docker Compose
 
 ```bash
 cp .env.example .env
@@ -478,93 +159,313 @@ docker compose run --rm migrate
 docker compose run --rm app prediction-desk load-sample-data
 docker compose up -d app
 curl http://localhost:8000/healthz
-curl http://localhost:8000/api/v1/markets
 ```
 
-Run the deterministic Docker smoke path:
+## API
+
+Local development can run without token enforcement. Staging should require bearer-token
+auth and should keep OpenAPI docs disabled.
+
+Important environment variables:
+
+```text
+APP_ENV=staging
+REQUIRE_API_TOKEN=true
+ENABLE_OPENAPI_DOCS=false
+DATABASE_URL=postgresql+psycopg://...
+PREDICTION_DESK_API_TOKEN=...
+LOG_LEVEL=INFO
+APP_VERSION=...
+GIT_COMMIT=...
+```
+
+Selected route groups:
+
+- `/api/v1/markets`
+- `/api/v1/ingestion/*`
+- `/api/v1/dataops/*`
+- `/api/v1/market-data/*`
+- `/api/v1/integrity/*`
+- `/api/v1/equivalence/*`
+- `/api/v1/divergence/*`
+- `/api/v1/pretrade/*`
+- `/api/v1/paper/*`
+- `/api/v1/research/*`
+- `/api/v1/workbench/*`
+- `/api/v1/vendor-data/*`
+
+See [docs/api.md](docs/api.md).
+
+## DataOps And Public Read
+
+Fixture mode is deterministic and safe:
 
 ```bash
-scripts/smoke_docker.sh
+prediction-desk dataops-cycle --mode FIXTURE
+prediction-desk dataops-coverage --scope-type GLOBAL
+prediction-desk dataops-gaps
 ```
 
-The smoke path validates Postgres migrations, sample loading, `/healthz`, `/readyz`,
-`/api/v1/markets`, run-once fixture ingestion, venue mappings, canonical market data,
-data-quality recomputation, dataops defaults/collection/coverage/gaps, resolution analysis, rule diffing, trust-verdict recomputation,
-integrity analysis, equivalence scans, divergence scans, integrity/divergence-aware
-trust-verdict metadata, pretrade checks, paper policy creation, simulated paper fills,
-paper portfolio readback, replay run creation, replay summary readback, replay
-market-data/paper/research metadata, default research strategies, research feature and
-proposal generation, proposal evaluation, research summaries and attribution,
-`integrity_gate_v1`, `pretrade_gate_v1`, `paper_sim_gate_v1`, and `research_policy_v1`.
+Manual public-read is opt-in and read-only:
 
-See [docs/deployment.md](docs/deployment.md) and [deploy/README.md](deploy/README.md)
-for staging and production deployment notes.
+```bash
+CONFIRM_PUBLIC_READ_ONLY=true \
+PUBLIC_READ_VENUES=kalshi \
+MAX_PAYLOADS=5 \
+scripts/staging_public_read_pilot.sh
+```
 
-## Architecture Notes
+Targeted Polymarket follow-up uses persisted token-aware mappings:
 
-The system separates canonical domain schemas from persistence records. Pydantic models
-represent replayable research artifacts; SQLAlchemy records store those artifacts in a
-local relational database. Rule snapshots include deterministic hashes over the rule text,
-normalized text, resolution source, settlement authority, and time zone so later backtests
-can identify the exact rule version used by a score or verdict.
+```bash
+prediction-desk dataops-run-collection \
+  --mode MANUAL_PUBLIC_FETCH \
+  --allow-network \
+  --venue polymarket \
+  --endpoint-type MARKET_DETAIL \
+  --endpoint-type ORDERBOOK \
+  --endpoint-type PRICE_HISTORY \
+  --market-id polymarket_market_... \
+  --max-payloads 5
+```
 
-Resolution Corpus v1 treats rule text as contract data. It preserves raw rule snapshots,
-parses deterministic predicates, records evidence spans, scores ambiguity by dimension,
-and stores rule diffs for point-in-time replay. The implementation is intentionally
-heuristic and deterministic: no LLM calls, no external APIs, and no venue connectivity.
+Public-read scheduling remains held. Do not schedule `MANUAL_PUBLIC_FETCH`.
 
-Replay Harness v1 asks what admissibility decision the system would have produced at a
-timestamp using only data available at or before that timestamp. It records selected
-snapshots, scores, actions, reason codes, and deterministic input/output hashes. It does
-not calculate PnL, simulate fills, place orders, or allocate capital.
+See [docs/data_scaling.md](docs/data_scaling.md) and
+[docs/staging_dataops_pilot.md](docs/staging_dataops_pilot.md).
 
-Read-Only Venue Ingestion v1 archives Kalshi and Polymarket public-shape payloads before
-normalization, stores venue-to-canonical mappings, and creates canonical rule snapshots and
-orderbooks that resolution analysis, trust verdicts, and replay can consume. Fixture
-ingestion is deterministic and network-free; manual public sample fetching is explicit,
-GET-only, and credential-free.
+## Desk Workbench
 
-Canonical Market Data v1 derives venue-neutral price and liquidity snapshots from stored
-orderbooks, normalizes fixture price history where available, and stores quality reports.
-Replay-safe lookups use `available_at <= asof_timestamp`; `observed_at` alone never makes a
-historical data point usable in replay.
+The workbench turns stored evidence into desk review artifacts. It does not recommend or
+place trades.
 
-Fast-Lane Integrity Signals v1 derives deterministic risk/admissibility signals from
-canonical market data, quality reports, rule snapshots, and rule diffs. It explicitly
-labels manipulation-related outputs as heuristic proxies only. Trust verdicts can consume
-an as-of integrity assessment, and replay can evaluate the `integrity_gate_v1` policy.
+```bash
+prediction-desk workbench-run
+prediction-desk workbench-build-queue
+prediction-desk workbench-queue --latest
+prediction-desk workbench-queue-summary
+prediction-desk workbench-status
+prediction-desk workbench-card --market-id mkt_...
+prediction-desk workbench-notes
+prediction-desk workbench-add-note \
+  --market-id mkt_... \
+  --text "Reviewed data-quality context. No trading action."
+prediction-desk workbench-update-item-status \
+  --queue-item-id queue_item_... \
+  --review-status WATCHING \
+  --reviewed-by operator \
+  --review-outcome NEEDS_MORE_DATA \
+  --review-reason "Keep in daily review."
+```
 
-Cross-Venue Equivalence and Divergence v1 first compare contract terms, outcomes,
-resolution sources, deadlines, ambiguity, and venue mechanics. Divergence analysis only
-runs after that contract-comparison gate and remains research context: it records aligned
-price gaps plus stale-data, liquidity, quality, integrity, and equivalence context without
-creating trade instructions.
+Queue items are append-only for audit. `--latest` returns the deduplicated active queue.
+Resolved and dismissed items are excluded by default from the active view.
 
-Pre-Trade Gate v1 evaluates hypothetical `TradeIntent` objects and persists the exact
-as-of inputs used for the decision. It combines hard restrictions, abstract exposure
-limits, trust verdicts, resolution risk, market-data quality, integrity, equivalence, and
-divergence context. It never creates venue orders and uses abstract exposure units rather
-than real account positions.
+See [docs/desk_workbench.md](docs/desk_workbench.md).
 
-Paper Execution Simulator v1 consumes hypothetical intents only after pre-trade approval.
-It creates simulated orders, fills, ledger entries, position snapshots, and portfolio
-snapshots using stored as-of market data. All position, equity, and mark-to-market fields
-are explicitly named simulated and no venue order or real account state is produced.
+## Vendor Data Evaluation
 
-DataOps v1 organizes read-only data scaling. It builds research universes, validates
-collection plans, runs one-shot fixture collection, records unsupported historical
-endpoints, computes coverage reports, and persists data gaps. Historical imports preserve
-`available_at`; old `observed_at` values are not replay-visible until the imported data is
-available to the system.
+Vendor data is evaluated as raw material. It is not imported into canonical market-data
+tables in v1.
 
-Scores and verdicts are deterministic. They accept explicit market, rule snapshot, order
-book snapshot, and as-of timestamp inputs. The resulting verdict stores model versions,
-data versions, source references, reason codes, and risk scores so later analysis can
-reconstruct why an action was selected.
+Supported local file types:
 
-Live trading and execution are deliberately absent. The API reads stored artifacts and
-recomputes deterministic verdicts from stored snapshots. This service is not an execution
-service. No exchange credentials, venue credentials, wallets, private keys, or signing keys
-belong in this repository at this stage. Future exchange adapters should write captured
-market data into the same point-in-time snapshot model before any research or backtest
-consumes it.
+- CSV
+- JSON
+- JSONL
+- Parquet, when PyArrow/Pandas are available
+
+Register and evaluate a sample:
+
+```bash
+prediction-desk vendor-register-source \
+  --vendor-name Kaggle \
+  --dataset-name polymarket_tick_level_orderbook_dataset \
+  --dataset-version kaggle_marvingozo_current \
+  --license-status SAMPLE_ONLY
+
+prediction-desk vendor-load-sample \
+  --vendor-source-id vendor_source_... \
+  --file-path data/vendor_samples/kaggle/.../snapshots_2026-03-23.parquet \
+  --max-rows 10000
+
+prediction-desk vendor-inspect-sample \
+  --sample-file-id vendor_sample_... \
+  --max-rows 10000
+
+prediction-desk vendor-validate-sample \
+  --sample-file-id vendor_sample_... \
+  --max-rows 10000
+
+prediction-desk vendor-dry-run-import \
+  --sample-file-id vendor_sample_... \
+  --sample-kind orderbook \
+  --max-rows 10000
+
+prediction-desk vendor-evaluate \
+  --vendor-source-id vendor_source_... \
+  --sample-file-id vendor_sample_...
+```
+
+Mapping configs can interpret vendor-specific columns without changing global heuristics:
+
+```bash
+prediction-desk vendor-inspect-sample \
+  --sample-file-id vendor_sample_... \
+  --mapping-config sample_data/vendor_samples/mapping_configs/debayan31415_btc_5m_top_of_book.json
+```
+
+Large-file sampling is supported with `--max-rows`. CSV and JSONL stream bounded rows.
+Parquet uses PyArrow batch reads. Files over 500 MB should be sampled before processing.
+
+Recent local vendor evaluations:
+
+- `luciferforge/polymarket-historical-prices`: weak for replay; missing token IDs and
+  replay-safe availability timestamps.
+- `debayan31415/polymarket-5-minutes-btc-up-down-data`: prediction-market quote dataset,
+  useful for exploratory dry-run research, but missing token IDs and full L2 depth.
+- `marvingozo/polymarket-tick-level-orderbook-dataset`: sampled Parquet snapshot looked
+  promising for dry-run L2 research; license and timestamp semantics still need review.
+- `ithiria137/polymarket-l2-capture-cumulative-2026`: not downloaded; useful files are
+  large SQLite databases and need a SQLite sampling path or owner-provided sample.
+
+See [docs/vendor_data_evaluation.md](docs/vendor_data_evaluation.md).
+
+## Azure Staging
+
+Current Azure staging architecture:
+
+- Azure Container Apps API
+- Azure Database for PostgreSQL Flexible Server
+- Azure Container Registry
+- Azure Container Apps Job for fixture-only schedule
+- bearer-token auth required
+- OpenAPI docs disabled
+- public-read schedule held
+- fixture job runs every 12 hours
+
+Useful scripts:
+
+```bash
+scripts/azure_build_push.sh
+scripts/azure_deploy_staging.sh
+scripts/azure_migrate_and_verify.sh
+scripts/azure_staging_smoke.sh
+scripts/azure_inspect_counts.sh
+scripts/staging_workbench_smoke.sh
+scripts/staging_desk_cycle.sh
+scripts/staging_workbench_status.sh
+scripts/azure_enable_fixture_schedule.sh
+scripts/azure_disable_fixture_schedule.sh
+```
+
+Local secret files such as `.env.azure.staging.local` must not be committed.
+
+See [docs/azure_staging.md](docs/azure_staging.md) and
+[docs/deployment.md](docs/deployment.md).
+
+## Research And Replay Examples
+
+Resolution analysis:
+
+```bash
+prediction-desk analyze-rules --all
+prediction-desk diff-rule-snapshots --market-id mkt_rate_cut_rule_change_2026
+```
+
+Replay:
+
+```bash
+prediction-desk replay-run \
+  --policy trust_verdict_v1 \
+  --start 2026-06-16T12:00:00+00:00 \
+  --end 2026-06-16T13:00:00+00:00 \
+  --interval-seconds 3600 \
+  --market-id mkt_cpi_yoy_at_least_3pct_2026_09 \
+  --max-steps 10
+```
+
+Integrity:
+
+```bash
+prediction-desk integrity-run \
+  --asof 2026-06-16T12:45:00Z \
+  --market-id kalshi_market_kxweather_nyc_rain_20260930 \
+  --max-steps 10
+```
+
+Equivalence and divergence:
+
+```bash
+prediction-desk equivalence-run \
+  --asof 2026-06-16T12:45:00Z \
+  --max-pairs 10
+
+prediction-desk divergence-run \
+  --asof 2026-06-16T12:45:00Z \
+  --max-pairs 10
+```
+
+Pre-trade and paper simulation:
+
+```bash
+prediction-desk pretrade-create-default-policy
+prediction-desk pretrade-check \
+  --market-id kalshi_market_kxweather_nyc_rain_20260930 \
+  --strategy-context RESEARCH \
+  --intent-type RESEARCH_ONLY \
+  --requested-size-units 1
+
+prediction-desk paper-create-default-policy
+prediction-desk paper-simulate-intent \
+  --market-id mkt_cpi_yoy_at_least_3pct_2026_09 \
+  --intent-type AGGRESSIVE_LIMIT \
+  --requested-price 0.52
+```
+
+Strategy research:
+
+```bash
+prediction-desk research-create-default-strategies
+prediction-desk research-run \
+  --strategy-id research_strategy_baseline_research_only_v1 \
+  --start 2026-06-16T12:00:00+00:00 \
+  --end 2026-06-16T13:00:00+00:00 \
+  --max-steps 10 \
+  --no-paper-simulation
+```
+
+## Documentation Index
+
+- [API](docs/api.md)
+- [Azure staging](docs/azure_staging.md)
+- [Data scaling and DataOps](docs/data_scaling.md)
+- [Deployment](docs/deployment.md)
+- [Desk workbench](docs/desk_workbench.md)
+- [Divergence signals](docs/divergence_signals.md)
+- [Equivalence](docs/equivalence.md)
+- [Ingestion](docs/ingestion.md)
+- [Integrity signals](docs/integrity_signals.md)
+- [Market data](docs/market_data.md)
+- [Paper execution](docs/paper_execution.md)
+- [Pre-trade gate](docs/pretrade_gate.md)
+- [Replay](docs/replay.md)
+- [Resolution corpus](docs/resolution_corpus.md)
+- [Scenario features](docs/scenario_features.md)
+- [Strategy research](docs/strategy_research.md)
+- [Vendor data evaluation](docs/vendor_data_evaluation.md)
+
+## Development Notes
+
+The system is designed around as-of-safe data. `observed_at` describes when something
+happened, while `available_at` controls when replay/research was allowed to know it.
+Do not use future data in replay or workbench summaries.
+
+Use structured parsers and deterministic logic. Avoid ad hoc parsing when the standard
+library or an existing local helper is available.
+
+When adding new persisted objects, add an Alembic migration and verify both SQLite and
+Postgres-compatible behavior.
+
+When adding external datasets, keep raw downloads under `data/vendor_samples/` and commit
+only tiny synthetic fixtures or mapping configs under `sample_data/`.

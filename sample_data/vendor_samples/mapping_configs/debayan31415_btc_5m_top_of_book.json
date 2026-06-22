@@ -1,0 +1,28 @@
+{
+  "mapping_name": "debayan31415_btc_5m_top_of_book",
+  "vendor_name": "Kaggle",
+  "dataset_name": "polymarket_5_minutes_btc_up_down_data",
+  "sample_kind": "binary_top_of_book_quotes",
+  "slug_column": "slug",
+  "market_start_column": "start_time",
+  "elapsed_seconds_column": "elapsed",
+  "quote_columns": {
+    "yes_bid": "bid_YES",
+    "yes_ask": "ask_YES",
+    "no_bid": "bid_NO",
+    "no_ask": "ask_NO"
+  },
+  "resolution_columns": {
+    "resolved": "resolved",
+    "winner": "winner"
+  },
+  "feature_columns": {
+    "btc_strike": "btc_strike",
+    "btc_current": "btc_current",
+    "btc_gap": "btc_gap",
+    "timestamp_log": "timestamp_log"
+  },
+  "metadata": {
+    "notes": "Local dry-run mapping for Kaggle debayan31415 BTC 5m top-of-book quote sample. No token IDs are present."
+  }
+}

@@ -76,6 +76,50 @@ It also identifies likely orderbook, trade, price-history, timestamp, and resolu
 columns. Detection is heuristic: it helps triage a sample, but it is not a production
 import contract.
 
+Timestamp detection recognizes strong timestamp names and aliases such as `timestamp`,
+`ts`, `time`, `datetime`, `date_time`, `created_time`, `created_at`, `observed_at`,
+`captured_at`, `available_at`, and `unix_timestamp`. Numeric Unix epoch values are
+accepted only after a column has been identified as timestamp-like by name; arbitrary
+numeric columns are not treated as timestamps just because their values look numeric.
+
+## Schema Mapping Configs
+
+Some vendor files use dataset-specific column names that should not become global
+heuristics. V1 supports optional local JSON mapping configs for inspection, validation,
+dry-run import, and evaluation. Mapping files are local-only, must not contain secrets,
+and do not enable canonical writes.
+
+Mapping configs can identify market, condition, question, Gamma, slug, token, and asset
+ID columns; observed/captured/available timestamp columns; market start and elapsed-time
+columns; price and top-of-book quote columns; orderbook depth columns; trade evidence
+columns; resolution columns; and feature columns that should be preserved as sample
+metadata context.
+
+```bash
+prediction-desk vendor-inspect-sample \
+  --sample-file-id vendor_sample_... \
+  --mapping-config sample_data/vendor_samples/mapping_configs/debayan31415_btc_5m_top_of_book.json
+
+prediction-desk vendor-validate-sample \
+  --sample-file-id vendor_sample_... \
+  --mapping-config sample_data/vendor_samples/mapping_configs/debayan31415_btc_5m_top_of_book.json
+
+prediction-desk vendor-dry-run-import \
+  --sample-file-id vendor_sample_... \
+  --mapping-config sample_data/vendor_samples/mapping_configs/debayan31415_btc_5m_top_of_book.json
+
+prediction-desk vendor-evaluate \
+  --vendor-source-id vendor_source_... \
+  --sample-file-id vendor_sample_... \
+  --mapping-config sample_data/vendor_samples/mapping_configs/debayan31415_btc_5m_top_of_book.json
+```
+
+The bundled BTC mapping declares `bid_YES`, `ask_YES`, `bid_NO`, and `ask_NO` as binary
+top-of-book quote fields. Top-of-book quotes are not full L2 depth, so mapped dry-run
+counts can increase price/top-of-book snapshot estimates without counting orderbook
+depth. If token or asset columns are absent, token mappings remain zero and token-mapping
+warnings remain valid.
+
 ## Validation Checks
 
 Validation checks include:
@@ -110,6 +154,18 @@ could do:
 
 V1 does not overwrite or backfill canonical market data from vendor samples.
 
+## Large-File Sampling
+
+Large vendor files should be sampled before inspection or dry-run evaluation. The loader
+supports `max_rows` on sample load, inspection, validation, and dry-run import. CSV and
+JSONL files stream the first N rows. Parquet files use PyArrow batch reads when available
+so a bounded row sample can be read without loading the whole file into memory.
+
+Files larger than 500 MB require row sampling before local processing. Sample metadata
+records `sampled_row_count`, `total_row_count` when cheaply available, and
+`sample_limit_applied`. The original vendor file is not mutated, and sampled evaluation
+does not write canonical market data.
+
 Dry-run classification is conservative:
 
 - price history rows can count price snapshots when timestamp and probability-style price
@@ -129,6 +185,11 @@ codes include `SUPPRESSED_TRADE_COUNT_MISSING_TRADE_EVIDENCE`,
 `SUPPRESSED_ORDERBOOK_COUNT_MISSING_BOOK_EVIDENCE`, `AMBIGUOUS_PRICE_SIZE_ROWS`, and
 `SAMPLE_KIND_SCHEMA_MISMATCH`.
 
+For `BINARY_TOP_OF_BOOK_QUOTES`, mapped YES/NO bid/ask fields can produce dry-run
+`price_snapshots` and `top_of_book_quote_snapshots`. They do not produce token mappings,
+trade prints, or full orderbook snapshots unless the sample also provides token/asset,
+trade, or depth evidence.
+
 ## CLI
 
 ```bash
@@ -140,13 +201,15 @@ prediction-desk vendor-register-source \
 
 prediction-desk vendor-load-sample \
   --vendor-source-id vendor_source_... \
-  --file-path sample_data/vendor_samples/polymarket_orderbook_sample.jsonl
+  --file-path sample_data/vendor_samples/polymarket_orderbook_sample.jsonl \
+  --max-rows 10000
 
-prediction-desk vendor-inspect-sample --sample-file-id vendor_sample_...
-prediction-desk vendor-validate-sample --sample-file-id vendor_sample_...
+prediction-desk vendor-inspect-sample --sample-file-id vendor_sample_... --max-rows 10000
+prediction-desk vendor-validate-sample --sample-file-id vendor_sample_... --max-rows 10000
 prediction-desk vendor-dry-run-import \
   --sample-file-id vendor_sample_... \
-  --sample-kind orderbook
+  --sample-kind orderbook \
+  --max-rows 10000
 prediction-desk vendor-evaluate \
   --vendor-source-id vendor_source_... \
   --sample-file-id vendor_sample_...
@@ -183,6 +246,70 @@ Synthetic samples live in `sample_data/vendor_samples/`:
 - `bad_missing_token_sample.csv`
 
 The bad sample exists to verify rejection and warning paths.
+
+## Local Kaggle Sample Findings
+
+The first local Kaggle sample evaluated was
+`luciferforge/polymarket-historical-prices`. It contains `markets.csv` and
+`prices_sample.csv`. After timestamp alias hardening, `prices_sample.csv` detects `ts`
+as a timestamp and dry-run can count price snapshots. The sample still remains weak for
+replay planning because it lacks CLOB token IDs or asset IDs, has unclear market ID
+semantics, and does not provide separate `observed_at`, `captured_at`, and
+`available_at` fields.
+
+The second local Kaggle sample evaluated was
+`debayan31415/polymarket-5-minutes-btc-up-down-data`. It contains a high-frequency BTC
+5-minute market CSV with `slug`, Unix-style `start_time`, YES/NO bid/ask quote fields,
+and resolution columns.
+
+Without a mapping config, inspection detects `start_time` and `resolved`, but not
+`ask_YES`, `bid_YES`, `ask_NO`, or `bid_NO` as price/quote fields. The dry-run result is
+mostly markets-only and the evaluation remains `HOLD`.
+
+With `sample_data/vendor_samples/mapping_configs/debayan31415_btc_5m_top_of_book.json`,
+inspection recognizes the YES/NO quote fields and `winner`. The mapped dry-run over the
+113,245-row local file detected:
+
+- 1,191 markets
+- 113,245 dry-run price snapshots
+- 113,245 dry-run top-of-book quote snapshots
+- 1,191 dry-run resolution events
+- 0 token mappings
+- 0 full orderbook snapshots
+- 0 trade prints
+
+The mapped evaluation remains `HOLD`: coverage improves from 40 to 60, but token mapping
+stays at 30, full orderbook depth is still absent, and replay safety still depends on
+clarifying `observed_at`, `captured_at`, and `available_at`. Mapped validation also found
+crossed YES/NO quote pairs, which should be clarified with the dataset owner before using
+the sample for research beyond dry-run evaluation.
+
+The next L2 candidate checked was
+`ithiria137/polymarket-l2-capture-cumulative-2026`. Its useful files are SQLite
+databases of approximately 1.36 GB and 1.97 GB, and the total dataset is over 2 GB. The
+dataset was not downloaded because the current scaffold does not sample SQLite files and
+the task guardrail blocks full large-dataset download without confirmation.
+
+The backup L2 candidate checked was
+`marvingozo/polymarket-tick-level-orderbook-dataset`. The full orderbook parquet files
+are large, but the dataset includes smaller snapshot parquet files. The evaluated bounded
+sample used `snapshots/snapshots_2026-03-23.parquet`:
+
+- file size: 66,369,237 bytes
+- total rows from Parquet metadata: 581,371
+- sampled rows loaded: 10,000
+- detected market IDs: `market_id`, `data_market_id`
+- detected token IDs: `data_token_id`
+- detected timestamps: `data_timestamp`, `timestamp_created_at`, `timestamp_received`
+- detected orderbook evidence: `data_bids`, `data_asks`, `data_best_bid`, `data_best_ask`,
+  `data_side`
+
+The sampled dry-run detected 3,549 markets, 3,549 token mappings, 9,886 orderbook
+snapshots, and 9,886 price snapshots. It did not count trades or resolution events. The
+sampled evaluation was `PROMISING`, with strong token, timestamp, orderbook, and price
+scores. The remaining caveats are license readiness (`CC BY-NC 4.0` is not commercial
+approval), point-in-time semantics for received/created timestamps, and the fact that
+sampled evaluation is not a full-dataset acceptance test.
 
 ## Azure Staging Validation
 

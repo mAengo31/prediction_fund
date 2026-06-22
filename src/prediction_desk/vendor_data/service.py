@@ -12,9 +12,14 @@ from prediction_desk.vendor_data.file_loader import (
     VendorFileLoaderError,
     compute_file_hash,
     detect_file_type,
+    estimate_total_rows_if_cheap,
     load_rows,
     schema_summary,
     validate_local_file,
+)
+from prediction_desk.vendor_data.mapping_config import (
+    VendorSchemaMappingConfigError,
+    load_vendor_schema_mapping_config,
 )
 from prediction_desk.vendor_data.models import (
     VendorDatasetSource,
@@ -25,8 +30,11 @@ from prediction_desk.vendor_data.models import (
     VendorEvaluationReport,
     VendorImportDryRun,
     VendorSampleFile,
+    VendorSampleInspectRequest,
     VendorSampleLoadRequest,
+    VendorSampleValidateRequest,
     VendorSchemaInspection,
+    VendorSchemaMappingConfig,
 )
 from prediction_desk.vendor_data.registry import build_vendor_source
 from prediction_desk.vendor_data.schema_inspector import inspect_vendor_schema
@@ -67,14 +75,32 @@ class VendorDataService:
     def load_sample(self, request: VendorSampleLoadRequest) -> VendorSampleFile:
         self.get_source(request.vendor_source_id)
         try:
-            path = validate_local_file(request.file_path, max_size_mb=request.max_size_mb)
+            path = validate_local_file(
+                request.file_path,
+                max_size_mb=request.max_size_mb,
+                allow_sampling=request.max_rows is not None,
+            )
             file_type = detect_file_type(path)
-            rows = load_rows(str(path), max_size_mb=request.max_size_mb)
+            rows = load_rows(
+                str(path),
+                max_size_mb=request.max_size_mb,
+                max_rows=request.max_rows,
+            )
         except VendorFileLoaderError as exc:
             raise VendorDataServiceError(exc.code) from exc
         file_hash = compute_file_hash(path)
+        total_row_count = estimate_total_rows_if_cheap(str(path))
+        sample_limit_applied = request.max_rows is not None and (
+            len(rows) == request.max_rows
+            or (total_row_count is not None and total_row_count > len(rows))
+        )
         sample = VendorSampleFile(
-            sample_file_id=_stable_id("vendor_sample", request.vendor_source_id, file_hash),
+            sample_file_id=_stable_id(
+                "vendor_sample",
+                request.vendor_source_id,
+                file_hash,
+                f"max_rows:{request.max_rows or 'all'}",
+            ),
             vendor_source_id=request.vendor_source_id,
             file_name=path.name,
             file_type=file_type,
@@ -87,8 +113,13 @@ class VendorDataService:
             metadata={
                 **request.metadata,
                 "max_size_mb": request.max_size_mb,
+                "max_rows": request.max_rows,
                 "original_path": request.file_path,
                 "archived_original_file": False,
+                "sampled_row_count": len(rows),
+                "total_row_count": total_row_count,
+                "total_row_count_known": total_row_count is not None,
+                "sample_limit_applied": sample_limit_applied,
             },
         )
         return self.repo.save_vendor_sample_file(sample)
@@ -112,35 +143,68 @@ class VendorDataService:
             raise VendorDataServiceError("vendor_sample_file_not_found")
         return sample
 
-    def inspect_sample(self, sample_file_id: str) -> VendorSchemaInspection:
+    def inspect_sample(
+        self,
+        sample_file_id: str,
+        request: VendorSampleInspectRequest | None = None,
+    ) -> VendorSchemaInspection:
         sample = self.get_sample(sample_file_id)
-        rows = self._load_sample_rows(sample)
+        effective_max_rows = _effective_max_rows(
+            persisted_max_rows=sample.metadata.get("max_rows"),
+            requested_max_rows=request.max_rows if request else None,
+        )
+        rows = self._load_sample_rows(sample, max_rows=request.max_rows if request else None)
+        mapping_config = self._load_mapping_config(
+            request.mapping_config_path if request else None
+        )
         inspection = inspect_vendor_schema(
             schema_inspection_id=_stable_id(
                 "vendor_schema",
                 sample.sample_file_id,
                 sample.file_hash,
+                _mapping_identity(mapping_config),
+                _row_limit_identity(effective_max_rows),
             ),
             sample_file_id=sample.sample_file_id,
             rows=rows,
             inspected_at=datetime.now(tz=UTC),
+            mapping_config=mapping_config,
         )
         return self.repo.save_vendor_schema_inspection(inspection)
 
-    def validate_sample(self, sample_file_id: str) -> VendorDataValidationReport:
+    def validate_sample(
+        self,
+        sample_file_id: str,
+        request: VendorSampleValidateRequest | None = None,
+    ) -> VendorDataValidationReport:
         sample = self.get_sample(sample_file_id)
-        inspection = self.inspect_sample(sample_file_id)
-        rows = self._load_sample_rows(sample)
+        effective_max_rows = _effective_max_rows(
+            persisted_max_rows=sample.metadata.get("max_rows"),
+            requested_max_rows=request.max_rows if request else None,
+        )
+        mapping_config = self._load_mapping_config(
+            request.mapping_config_path if request else None
+        )
+        inspection = self.inspect_sample(
+            sample_file_id,
+            VendorSampleInspectRequest(
+                mapping_config_path=request.mapping_config_path if request else None,
+            ),
+        )
+        rows = self._load_sample_rows(sample, max_rows=request.max_rows if request else None)
         report = validate_vendor_rows(
             validation_report_id=_stable_id(
                 "vendor_validation",
                 sample.sample_file_id,
                 sample.file_hash,
+                _mapping_identity(mapping_config),
+                _row_limit_identity(effective_max_rows),
             ),
             sample_file_id=sample.sample_file_id,
             rows=rows,
             inspection=inspection,
             created_at=datetime.now(tz=UTC),
+            mapping_config=mapping_config,
         )
         return self.repo.save_vendor_data_validation_report(report)
 
@@ -150,8 +214,20 @@ class VendorDataService:
         request: VendorDryRunImportRequest | None = None,
     ) -> VendorImportDryRun:
         sample = self.get_sample(sample_file_id)
-        inspection = self.inspect_sample(sample_file_id)
-        rows = self._load_sample_rows(sample)
+        effective_max_rows = _effective_max_rows(
+            persisted_max_rows=sample.metadata.get("max_rows"),
+            requested_max_rows=request.max_rows if request else None,
+        )
+        mapping_config = self._load_mapping_config(
+            request.mapping_config_path if request else None
+        )
+        inspection = self.inspect_sample(
+            sample_file_id,
+            VendorSampleInspectRequest(
+                mapping_config_path=request.mapping_config_path if request else None,
+            ),
+        )
+        rows = self._load_sample_rows(sample, max_rows=request.max_rows if request else None)
         sample_kind = request.sample_kind if request else None
         dry_run = dry_run_vendor_import(
             dry_run_id=_stable_id(
@@ -159,12 +235,15 @@ class VendorDataService:
                 sample.sample_file_id,
                 sample.file_hash,
                 sample_kind.value if sample_kind else "auto",
+                _mapping_identity(mapping_config),
+                _row_limit_identity(effective_max_rows),
             ),
             sample_file_id=sample.sample_file_id,
             rows=rows,
             inspection=inspection,
             created_at=datetime.now(tz=UTC),
             sample_kind=sample_kind,
+            mapping_config=mapping_config,
         )
         return self.repo.save_vendor_import_dry_run(dry_run)
 
@@ -186,15 +265,37 @@ class VendorDataService:
             sample = self.get_sample(sample_id)
             if sample.vendor_source_id != source.vendor_source_id:
                 raise VendorDataServiceError("vendor_sample_source_mismatch")
-            inspections.append(self.inspect_sample(sample_id))
-            validations.append(self.validate_sample(sample_id))
-            dry_runs.append(self.dry_run_import(sample_id))
+            inspections.append(
+                self.inspect_sample(
+                    sample_id,
+                    VendorSampleInspectRequest(
+                        mapping_config_path=request.mapping_config_path,
+                    ),
+                )
+            )
+            validations.append(
+                self.validate_sample(
+                    sample_id,
+                    VendorSampleValidateRequest(
+                        mapping_config_path=request.mapping_config_path,
+                    ),
+                )
+            )
+            dry_runs.append(
+                self.dry_run_import(
+                    sample_id,
+                    VendorDryRunImportRequest(
+                        mapping_config_path=request.mapping_config_path,
+                    ),
+                )
+            )
 
         report = build_vendor_evaluation_report(
             evaluation_report_id=_stable_id(
                 "vendor_eval",
                 source.vendor_source_id,
                 ",".join(sorted(sample_ids)),
+                request.mapping_config_path or "auto_mapping",
                 datetime.now(tz=UTC).isoformat(),
             ),
             source=source,
@@ -225,14 +326,72 @@ class VendorDataService:
             raise VendorDataServiceError("vendor_evaluation_report_not_found")
         return report
 
-    def _load_sample_rows(self, sample: VendorSampleFile) -> list[dict[str, object]]:
+    def _load_sample_rows(
+        self,
+        sample: VendorSampleFile,
+        *,
+        max_rows: int | None = None,
+    ) -> list[dict[str, object]]:
         max_size_mb = int(sample.metadata.get("max_size_mb", 100))
+        effective_max_rows = _effective_max_rows(
+            persisted_max_rows=sample.metadata.get("max_rows"),
+            requested_max_rows=max_rows,
+        )
         try:
-            return load_rows(sample.local_path, max_size_mb=max_size_mb)
+            return load_rows(
+                sample.local_path,
+                max_size_mb=max_size_mb,
+                max_rows=effective_max_rows,
+            )
         except VendorFileLoaderError as exc:
+            raise VendorDataServiceError(exc.code) from exc
+
+    def _load_mapping_config(
+        self,
+        mapping_config_path: str | None,
+    ) -> VendorSchemaMappingConfig | None:
+        if not mapping_config_path:
+            return None
+        try:
+            return load_vendor_schema_mapping_config(mapping_config_path)
+        except VendorSchemaMappingConfigError as exc:
             raise VendorDataServiceError(exc.code) from exc
 
 
 def _stable_id(prefix: str, *parts: str) -> str:
     digest = hashlib.sha256("|".join(parts).encode()).hexdigest()[:24]
     return f"{prefix}_{digest}"
+
+
+def _mapping_identity(mapping_config: VendorSchemaMappingConfig | None) -> str:
+    if mapping_config is None:
+        return "auto_mapping"
+    return mapping_config.mapping_name
+
+
+def _row_limit_identity(max_rows: int | None) -> str:
+    return f"rows:{max_rows or 'all'}"
+
+
+def _effective_max_rows(
+    *,
+    persisted_max_rows: object,
+    requested_max_rows: int | None,
+) -> int | None:
+    persisted = _coerce_positive_int(persisted_max_rows)
+    if persisted is not None and requested_max_rows is not None:
+        return min(persisted, requested_max_rows)
+    return requested_max_rows if requested_max_rows is not None else persisted
+
+
+def _coerce_positive_int(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, str) and value.isdigit():
+        parsed = int(value)
+        return parsed if parsed > 0 else None
+    return None

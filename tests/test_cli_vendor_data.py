@@ -7,6 +7,9 @@ from typer.testing import CliRunner
 from prediction_desk.cli import app
 
 SAMPLE_DIR = Path("sample_data/vendor_samples")
+BTC_MAPPING_CONFIG = (
+    SAMPLE_DIR / "mapping_configs" / "debayan31415_btc_5m_top_of_book.json"
+)
 
 
 def test_cli_vendor_workflow(tmp_path: Path) -> None:
@@ -46,6 +49,8 @@ def test_cli_vendor_workflow(tmp_path: Path) -> None:
             vendor_source_id,
             "--file-path",
             str(SAMPLE_DIR / "polymarket_orderbook_sample.jsonl"),
+            "--max-rows",
+            "3",
         ],
     )
     assert sample.exit_code == 0
@@ -84,6 +89,8 @@ def test_cli_vendor_workflow(tmp_path: Path) -> None:
             sample_file_id,
             "--sample-kind",
             "orderbook",
+            "--max-rows",
+            "2",
         ],
     )
     evaluate = runner.invoke(
@@ -115,7 +122,80 @@ def test_cli_vendor_workflow(tmp_path: Path) -> None:
     assert "PASS" in validate.output or "WARNING" in validate.output
     assert dry_run.exit_code == 0
     assert "vendor_dry_run_" in dry_run.output
+    assert "2" in dry_run.output
     assert evaluate.exit_code == 0
     assert "vendor_eval_" in evaluate.output
     assert reports.exit_code == 0
     assert "vendor_eval_" in reports.output
+
+    btc_sample_path = tmp_path / "btc_quotes.csv"
+    btc_sample_path.write_text(
+        "\n".join(
+            [
+                "slug,start_time,elapsed,ask_YES,bid_YES,ask_NO,bid_NO,btc_strike,btc_current,btc_gap,timestamp_log,resolved,winner",
+                "btc-up-1,2026-06-01T00:00:00Z,0,0.62,0.60,0.42,0.40,100000,100500,500,1781956800,true,YES",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    mapped_sample = runner.invoke(
+        app,
+        [
+            "vendor-load-sample",
+            "--database-url",
+            database_url,
+            "--vendor-source-id",
+            vendor_source_id,
+            "--file-path",
+            str(btc_sample_path),
+        ],
+    )
+    assert mapped_sample.exit_code == 0
+    mapped_sample_file_id = next(
+        line.split("|", maxsplit=1)[0].strip()
+        for line in mapped_sample.output.splitlines()
+        if line.startswith("vendor_sample_")
+    )
+    mapped_inspect = runner.invoke(
+        app,
+        [
+            "vendor-inspect-sample",
+            "--database-url",
+            database_url,
+            "--sample-file-id",
+            mapped_sample_file_id,
+            "--mapping-config",
+            str(BTC_MAPPING_CONFIG),
+        ],
+    )
+    mapped_validate = runner.invoke(
+        app,
+        [
+            "vendor-validate-sample",
+            "--database-url",
+            database_url,
+            "--sample-file-id",
+            mapped_sample_file_id,
+            "--mapping-config",
+            str(BTC_MAPPING_CONFIG),
+        ],
+    )
+    mapped_dry_run = runner.invoke(
+        app,
+        [
+            "vendor-dry-run-import",
+            "--database-url",
+            database_url,
+            "--sample-file-id",
+            mapped_sample_file_id,
+            "--mapping-config",
+            str(BTC_MAPPING_CONFIG),
+        ],
+    )
+
+    assert mapped_inspect.exit_code == 0
+    assert "bid_YES" in mapped_inspect.output
+    assert mapped_validate.exit_code == 0
+    assert mapped_dry_run.exit_code == 0
+    assert "vendor_dry_run_" in mapped_dry_run.output

@@ -214,7 +214,9 @@ from prediction_desk.vendor_data.models import (
     VendorEvaluationReport,
     VendorImportDryRun,
     VendorSampleFile,
+    VendorSampleInspectRequest,
     VendorSampleLoadRequest,
+    VendorSampleValidateRequest,
     VendorSchemaInspection,
 )
 from prediction_desk.vendor_data.service import VendorDataService, VendorDataServiceError
@@ -3309,9 +3311,13 @@ def get_vendor_sample(
 def inspect_vendor_sample(
     sample_file_id: str,
     repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    request_body: VendorSampleInspectRequest | None = None,
 ) -> VendorSchemaInspection:
     try:
-        return VendorDataService(repo).inspect_sample(sample_file_id)
+        return VendorDataService(repo).inspect_sample(
+            sample_file_id,
+            request_body or VendorSampleInspectRequest(),
+        )
     except VendorDataServiceError as exc:
         raise _vendor_data_http_error(exc) from exc
 
@@ -3324,9 +3330,13 @@ def inspect_vendor_sample(
 def validate_vendor_sample(
     sample_file_id: str,
     repo: Annotated[PredictionMarketRepository, Depends(get_repository)],
+    request_body: VendorSampleValidateRequest | None = None,
 ) -> VendorDataValidationReport:
     try:
-        return VendorDataService(repo).validate_sample(sample_file_id)
+        return VendorDataService(repo).validate_sample(
+            sample_file_id,
+            request_body or VendorSampleValidateRequest(),
+        )
     except VendorDataServiceError as exc:
         raise _vendor_data_http_error(exc) from exc
 
