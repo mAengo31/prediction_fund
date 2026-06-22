@@ -1,471 +1,1672 @@
-# prediction-desk
+# Prediction Desk
 
-`prediction-desk` is a prediction-market research and operations platform for
-point-in-time analysis, data quality review, replay, simulated execution, and desk-facing
-decision support.
+**Prediction Desk** is a cloud-deployed, non-executing prediction-market trading-station and research platform for building a quant fund around prediction markets.
 
-It is intentionally **not** a live trading system. The repository contains no live order
-placement, no order cancellation, no wallets, no private keys, no venue trading
-credentials, no real account IDs, and no execution adapters.
+The project is currently focused on **live-market paper validation**, not historical-only backtesting. Because prediction markets are heavily path-dependent, liquidity-sensitive, and contract-resolution-sensitive, the next research phase should test hypotheses against **current live public market data** using paper trading and pre-trade controls before any real execution is considered.
+
+---
 
 ## Current Status
 
-The project currently supports:
+### Deployed Staging Environment
 
-- canonical prediction-market domain models
-- SQLAlchemy persistence and Alembic migrations through `20260619_0016`
-- internal FastAPI API with bearer-token auth support
-- Docker and Postgres local deployment
-- Azure Container Apps staging deployment path
-- Azure PostgreSQL Flexible Server persistence
-- fixture-only Azure scheduling
-- read-only Kalshi public-read validation
-- token-aware Polymarket public-read validation
-- Polymarket CLOB orderbook and price-history ingestion
-- canonical market data snapshots and data-quality reports
-- resolution corpus and rule ambiguity analysis
-- point-in-time replay harness
-- integrity signals
-- cross-venue equivalence engine
-- cross-venue divergence signals
-- pre-trade admissibility gate for hypothetical intents
-- simulated-only paper execution
-- deterministic strategy research harness
-- slow-lane scenario feature interface
-- DataOps universes, collection plans, coverage, gaps, and backfill records
-- desk decision workbench with queues, cards, notes, and status summaries
-- vendor dataset intake and dry-run evaluation scaffold
-- vendor schema mapping configs
-- large-file vendor sampling for CSV, JSONL, and Parquet
-
-## Safety Boundary
-
-These boundaries are deliberate and should not be weakened casually:
-
-- No live trading.
-- No order routing.
-- No venue trading credentials.
-- No authenticated venue trading endpoints.
-- No wallets or private keys.
-- No real account IDs.
-- No execution adapters.
-- No public-read collection schedule.
-- No vendor API pulls.
-- No canonical writes from vendor samples.
-- No LLM calls in core analysis paths.
-- No MiroFish runtime execution.
-
-Fixture collection may be scheduled. Public-read collection remains manual and explicitly
-gated. Vendor data evaluation remains local-file and dry-run only.
-
-## Repository Layout
+The system is deployed to Azure staging.
 
 ```text
-src/prediction_desk/
-  api/             FastAPI app, auth, routes, schemas
-  dataops/         universes, collection plans, coverage, gaps, backfill
-  divergence/      equivalence-gated cross-venue divergence context
-  domain/          canonical market, event, outcome, rule, venue models
-  equivalence/     contract comparison and comparable-market grouping
-  ingestion/       read-only fixture/public payload ingestion
-  integrity/       deterministic market integrity features/signals
-  marketdata/      orderbook, price, liquidity, and quality reports
-  paper/           simulated-only orders, fills, ledger, portfolio
-  persistence/     SQLAlchemy ORM, repositories, database setup
-  pretrade/        hypothetical-intent admissibility checks
-  replay/          point-in-time replay harness
-  research/        deterministic research features/signals/proposals
-  resolution/      rule parsing, ambiguity, diffs
-  scenario/        fixture-backed slow-lane scenario features
-  scoring/         trust and resolution-risk scoring
-  vendor_data/     local vendor sample inspection, validation, dry-run evaluation
-  workbench/       review queues, decision cards, comparison cards, notes
+API:
+  Azure Container Apps
 
-docs/              subsystem and operations documentation
-sample_data/       tiny committed fixtures and mapping configs
-scripts/           local, Docker, staging, Azure, and smoke helpers
-deploy/azure/      Azure staging infrastructure docs/templates
-alembic/           migrations
-tests/             unit, API, CLI, and integration tests
+Database:
+  Azure PostgreSQL Flexible Server
+
+Registry:
+  Azure Container Registry
+
+Scheduled job:
+  Azure Container Apps Job
+
+Current scheduled collection:
+  Fixture-only DataOps job every 12 hours
+
+Public-read collection:
+  Manually tested
+  Not scheduled
+
+Live trading:
+  Not implemented
+  Not enabled
 ```
 
-Downloaded vendor files belong under `data/vendor_samples/`, which is ignored by git.
-Do not commit paid or downloaded vendor datasets.
+Current staging API:
 
-## Quickstart
+```text
+https://prediction-desk-staging-api.bluebush-22f9863f.centralus.azurecontainerapps.io
+```
 
-Use Python 3.12+.
+Staging security posture:
+
+```text
+Bearer-token auth: required
+/docs: disabled
+/openapi.json: disabled
+Public-read schedule: held
+Venue credentials: none
+Wallets/private keys: none
+Order routing: none
+Live execution: none
+```
+
+---
+
+## What Has Been Built
+
+### 1. Core Platform
+
+The project has a production-style internal service architecture:
+
+```text
+FastAPI internal API
+CLI
+PostgreSQL persistence
+Alembic migrations
+Docker
+Azure Container Apps deployment
+Azure PostgreSQL deployment
+Smoke scripts
+DB inspection scripts
+Bearer-token API auth
+```
+
+The system can run locally, in Docker Compose, and in Azure staging.
+
+---
+
+### 2. Canonical Prediction-Market Data Model
+
+The system normalizes prediction-market data into canonical objects:
+
+```text
+Venue
+Event
+Market
+Outcome
+MarketRuleSnapshot
+OrderBookSnapshot
+MarketPriceSnapshot
+MarketLiquiditySnapshot
+MarketDataQualityReport
+RawVenuePayload
+VenueMarketMapping
+VenueOutcomeTokenMapping
+```
+
+The Polymarket path is now token-aware:
+
+```text
+Gamma market ID
+condition ID
+question ID
+YES / NO outcome token IDs
+CLOB asset IDs
+enableOrderBook status
+```
+
+---
+
+### 3. Read-Only Venue Ingestion
+
+Supported public-read ingestion paths:
+
+```text
+Kalshi:
+  MARKET_LIST
+  MARKET_DETAIL
+  ORDERBOOK
+
+Polymarket:
+  MARKET_DETAIL
+  ORDERBOOK by token / asset ID
+  PRICE_HISTORY by token / asset ID
+```
+
+Public-read collection has been manually validated for both Kalshi and Polymarket. Public-read scheduling is still held.
+
+Current validated Polymarket path:
+
+```text
+MARKET_DETAIL
+ORDERBOOK
+PRICE_HISTORY
+```
+
+Recent validated Polymarket pilot:
+
+```text
+Payloads archived: 5
+  1 MARKET_DETAIL
+  2 ORDERBOOK
+  2 PRICE_HISTORY
+
+Errors: 0
+Price snapshots added: 52
+Orderbooks added: 2
+Liquidity snapshots added: 2
+```
+
+---
+
+### 4. DataOps Layer
+
+The DataOps layer manages controlled collection and coverage:
+
+```text
+Market universes
+Collection plans
+Collection runs
+Backfill jobs and segments
+Coverage reports
+Data gaps
+Retention-policy objects
+DataOps cycles
+```
+
+Current Azure scheduled job:
+
+```text
+Job:
+  pd-fixture-dataops-job
+
+Cadence:
+  every 12 hours
+
+Command:
+  /app/scripts/run_fixture_dataops_job.sh
+
+Actual command inside container:
+  prediction-desk dataops-cycle --mode FIXTURE
+```
+
+This job does **not** run public-read collection.
+
+---
+
+### 5. Data Quality and Gap Detection
+
+The system tracks market-data coverage and gaps.
+
+Typical coverage fields:
+
+```text
+markets_with_rules
+markets_with_orderbooks
+markets_with_price_snapshots
+markets_with_liquidity_snapshots
+markets_with_quality_reports
+coverage_score
+gap counts by type
+```
+
+Known current staging condition:
+
+```text
+Orderbook coverage: complete for current staging set
+Price coverage: complete for current staging set
+Liquidity coverage: complete for current staging set
+Rule snapshot coverage: incomplete
+```
+
+Known rule limitation:
+
+```text
+Several Kalshi public detail payloads expose rules_primary and rules_secondary,
+but the fields are empty. The system correctly does not fabricate rule snapshots.
+```
+
+---
+
+### 6. Resolution Corpus
+
+The resolution corpus treats market rule text as contract data.
+
+It supports:
+
+```text
+MarketRuleSnapshot hashing
+ResolutionPredicate parsing
+AmbiguityAssessment
+RuleSnapshotDiff
+Resolution-risk scoring
+```
+
+This is meant to catch contract ambiguity, settlement ambiguity, source ambiguity, deadline ambiguity, and rule changes.
+
+---
+
+### 7. Fast-Lane Integrity Signals
+
+The integrity layer detects market-state risks:
+
+```text
+Empty book
+Crossed book
+One-sided book
+Wide spread
+Spread widening
+Depth collapse
+Price jump
+Stale market data
+Low data quality
+Extreme book imbalance
+Rule-change context
+```
+
+These are review and admissibility signals, not alpha claims.
+
+---
+
+### 8. Cross-Venue Equivalence
+
+The equivalence engine compares markets across venues.
+
+It assesses:
+
+```text
+title similarity
+event identity
+outcome structure
+outcome mapping
+predicate similarity
+resolution source alignment
+settlement authority alignment
+temporal alignment
+threshold alignment
+timezone alignment
+ambiguity compatibility
+venue-rule compatibility
+```
+
+Outputs include:
+
+```text
+EQUIVALENT
+NEAR_EQUIVALENT
+RELATED
+NEEDS_REVIEW
+NOT_EQUIVALENT
+```
+
+Comparison permission:
+
+```text
+COMPARABLE
+COMPARABLE_WITH_HAIRCUT
+MANUAL_REVIEW
+DO_NOT_COMPARE
+```
+
+---
+
+### 9. Cross-Venue Divergence
+
+Once markets are comparable, the divergence layer compares aligned prices and context.
+
+It supports:
+
+```text
+SAME outcome price alignment
+INVERSE outcome price alignment
+spread-adjusted gap
+stale-side context
+low-liquidity context
+low-data-quality context
+high-integrity-risk context
+```
+
+Divergence outputs are review artifacts only. The system does **not** call these “arbitrage” and does **not** recommend trades from them.
+
+---
+
+### 10. Pre-Trade Gate
+
+The pre-trade gate evaluates hypothetical trade intents.
+
+Possible actions:
+
+```text
+ALLOW
+ALLOW_SMALLER_SIZE
+PASSIVE_ONLY
+MANUAL_REVIEW
+NO_TRADE
+```
+
+Inputs:
+
+```text
+market status
+trust verdict
+resolution risk
+market-data quality
+integrity risk
+equivalence context
+divergence context
+restrictions
+abstract exposure limits
+intent type
+```
+
+The pre-trade gate does not place orders.
+
+---
+
+### 11. Paper Execution Simulator
+
+The paper simulator creates simulated-only objects:
+
+```text
+PaperOrder
+PaperFill
+PaperLedgerEntry
+PaperPositionSnapshot
+PaperPortfolioSnapshot
+PaperSimulationRun
+```
+
+Rules:
+
+```text
+Pre-trade gate must pass before simulation
+No live orders
+No venue order IDs
+No real account IDs
+No wallets
+No private keys
+Long-only by default
+All PnL/equity outputs are simulated
+```
+
+---
+
+### 12. Research Harness
+
+The research harness can evaluate strategy hypotheses through:
+
+```text
+ResearchFeatureSnapshot
+ResearchSignal
+ResearchIntentProposal
+ResearchDecisionTrace
+ResearchRun
+ResearchRunSummary
+ResearchAttributionReport
+```
+
+Default research strategies exist, but they are scaffolds:
+
+```text
+baseline_research_only_v1
+trust_verdict_allow_filter_v1
+integrity_pass_filter_v1
+divergence_research_hypothesis_v1
+composite_conservative_research_v1
+scenario_context_research_v1
+```
+
+They are not production alpha models.
+
+---
+
+### 13. Scenario / MiroFish-Style Slow-Lane Features
+
+The system can import MiroFish-style reports as local scenario artifacts.
+
+Supported:
+
+```text
+ScenarioSeedBundle
+ScenarioSimulationSpec
+ScenarioArtifact
+ScenarioFeatureSnapshot
+ScenarioRun
+```
+
+Not supported yet:
+
+```text
+Live MiroFish execution
+LLM calls
+Zep / GraphRAG calls
+Scenario-driven trading decisions
+```
+
+Scenario features are research context only.
+
+---
+
+### 14. Desk Decision Workbench
+
+The workbench is the first trading-station surface.
+
+It supports:
+
+```text
+DeskWatchlist
+MarketReviewQueueItem
+MarketDecisionCard
+CrossVenueComparisonCard
+DeskReviewNote
+WorkbenchRun
+WorkbenchRunSummary
+```
+
+It can build:
+
+```text
+latest active review queue
+market decision cards
+cross-venue comparison cards
+desk notes
+workbench status summaries
+```
+
+Queue items include diagnostics:
+
+```text
+score_components
+score_explanation
+hard_escalators
+soft_escalators
+dampeners
+```
+
+Queue review workflow supports:
+
+```text
+NEW
+IN_REVIEW
+RESOLVED
+DISMISSED
+WATCHING
+```
+
+Review outcomes include:
+
+```text
+DATA_ISSUE_CONFIRMED
+FALSE_POSITIVE
+NEEDS_MORE_DATA
+STRATEGY_CANDIDATE
+CONTRACT_RISK_CONFIRMED
+DIVERGENCE_REVIEWED
+PRETRADE_BLOCK_CONFIRMED
+WATCHLIST_ONLY
+DISMISSED_NO_ACTION
+OTHER
+```
+
+---
+
+### 15. Vendor Dataset Evaluation
+
+The vendor-data evaluator can inspect third-party historical data samples before purchasing or importing them.
+
+Supported:
+
+```text
+VendorDatasetSource
+VendorSampleFile
+VendorSchemaInspection
+VendorDataValidationReport
+VendorImportDryRun
+VendorEvaluationReport
+VendorSchemaMappingConfig
+```
+
+Supported local file types:
+
+```text
+CSV
+JSON
+JSONL
+Parquet
+```
+
+Capabilities:
+
+```text
+local file loading
+URL rejection
+file hashing
+schema inspection
+timestamp detection
+token ID detection
+price/size validation
+orderbook/trade/price-history classification
+dry-run canonical import
+vendor evaluation scoring
+mapping config support
+large-file sampling
+```
+
+Vendor data is currently:
+
+```text
+dry-run only
+not written into canonical market-data tables
+not pulled from vendor APIs
+not production-imported
+```
+
+---
+
+## Current Operating Mode
+
+The system is currently operating in this safe mode:
+
+```text
+Fixture-only schedule:
+  active
+
+Public-read schedule:
+  held
+
+Live trading:
+  absent
+
+Vendor imports:
+  dry-run only
+
+Workbench:
+  active and usable
+
+Daily desk review:
+  ready
+```
+
+Recommended daily workflow:
+
+```text
+1. Run or inspect workbench status.
+2. Review CRITICAL and HIGH queue items.
+3. Mark items WATCHING / RESOLVED / DISMISSED / IN_REVIEW.
+4. Add desk notes.
+5. Track which reasons are useful or noisy.
+```
+
+---
+
+## Why We Are Not Testing Live Profit Yet
+
+We should test profit, but the next version of that test should be **live-market paper validation**, not historical-only backtesting.
+
+Prediction markets are path-dependent and sensitive to:
+
+```text
+liquidity
+orderbook staleness
+resolution wording
+token mapping
+market-specific settlement rules
+spread and fill assumptions
+public data latency
+venue-specific quirks
+```
+
+A naive historical backtest can easily produce fake edge.
+
+The system was built first to prevent fake edge from:
+
+```text
+non-equivalent contracts
+missing token IDs
+bad timestamp semantics
+stale data
+ambiguous rules
+thin books
+crossed books
+unfillable quotes
+missing coverage
+```
+
+Now that the system exists, the next real objective is:
+
+```text
+Live-market paper validation
+```
+
+Not live execution.
+
+---
+
+## Next Technical Direction
+
+The next major phase is to test simple hypotheses against live public market data in paper mode.
+
+Suggested next phase:
+
+```text
+Live Paper Strategy Smoke Test v1
+```
+
+Inputs:
+
+```text
+current public Polymarket orderbooks
+current public Polymarket price history
+current market-data quality
+integrity signals
+pre-trade gate
+paper simulator
+workbench review queue
+```
+
+Example hypotheses:
+
+```text
+1. Book imbalance predicts short-horizon mid-price movement.
+2. Wide-spread markets should be avoided by paper strategies.
+3. Divergence NEEDS_REVIEW markets should not pass automated pre-trade.
+4. Low-quality markets produce bad or unfillable paper signals.
+5. Scenario context should create review priority, not direct proposals.
+```
+
+Expected outputs:
+
+```text
+paper-only signals
+pre-trade decisions
+simulated paper orders
+simulated fills or no-fills
+simulated position snapshots
+reason-code attribution
+desk review cards
+```
+
+Still prohibited:
+
+```text
+live orders
+wallets
+private keys
+authenticated venue trading
+capital deployment
+```
+
+---
+
+# API Usage
+
+## Base URL
+
+Local:
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
+export API_BASE_URL="http://localhost:8000"
+```
+
+Azure staging:
+
+```bash
+export API_BASE_URL="https://prediction-desk-staging-api.bluebush-22f9863f.centralus.azurecontainerapps.io"
+```
+
+## Authentication
+
+Staging requires a bearer token.
+
+```bash
+export PREDICTION_DESK_API_TOKEN="<your-token>"
+```
+
+Use:
+
+```bash
+-H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Example:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/markets" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Unauthenticated or invalid-token calls to protected endpoints return:
+
+```text
+401 Unauthorized
+```
+
+Staging also disables:
+
+```text
+/docs
+/openapi.json
+```
+
+---
+
+## Health and Readiness
+
+```bash
+curl -s "$API_BASE_URL/healthz"
+curl -s "$API_BASE_URL/readyz" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Available information:
+
+```text
+service status
+version
+environment
+database readiness
+migration status when available
+```
+
+---
+
+## Markets
+
+List markets:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/markets" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Get one market:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/markets/<market_id>" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Available information:
+
+```text
+market ID
+venue ID
+event ID
+title
+market type
+status
+close time
+settlement time
+metadata
+```
+
+---
+
+## DataOps
+
+Create defaults:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/dataops/defaults" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+List universes:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/dataops/universes" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+List collection plans:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/dataops/collection-plans" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Run fixture collection once:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/dataops/collection/run-once" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mode": "FIXTURE",
+    "allow_network": false,
+    "venue_names": ["kalshi", "polymarket"],
+    "max_payloads": 20,
+    "metadata": {"source": "manual_fixture_run"}
+  }'
+```
+
+Manual public-read collection is available but gated:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/dataops/collection/run-once" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mode": "MANUAL_PUBLIC_FETCH",
+    "allow_network": true,
+    "venue_names": ["polymarket"],
+    "endpoint_types": ["MARKET_DETAIL", "ORDERBOOK", "PRICE_HISTORY"],
+    "market_ids": ["<market_id>"],
+    "max_payloads": 5,
+    "metadata": {"source": "manual_public_read_pilot"}
+  }'
+```
+
+Do not schedule public-read collection yet.
+
+Compute coverage:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/dataops/coverage/compute" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"scope_type": "GLOBAL"}'
+```
+
+Detect gaps:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/dataops/gaps/detect" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Available information:
+
+```text
+coverage score
+markets with rules
+markets with orderbooks
+markets with price snapshots
+markets with liquidity snapshots
+markets with quality reports
+missing rule gaps
+missing orderbook gaps
+missing price gaps
+missing liquidity gaps
+stale market data gaps
+```
+
+---
+
+## Market Data
+
+Latest market data:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/markets/<market_id>/market-data/latest" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Price snapshots:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/markets/<market_id>/market-data/prices?limit=100" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Liquidity snapshots:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/markets/<market_id>/market-data/liquidity?limit=100" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Data quality:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/markets/<market_id>/data-quality/latest" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Available information:
+
+```text
+latest price
+bid
+ask
+mid
+spread
+orderbook depth
+liquidity
+quality score
+quality reason codes
+staleness
+missing side / empty book / crossed book flags
+```
+
+---
+
+## Resolution Corpus
+
+Analyze latest market rules:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/markets/<market_id>/resolution/analyze-latest" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Get latest resolution analysis:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/markets/<market_id>/resolution/latest" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Available information:
+
+```text
+rule snapshot
+resolution predicate
+ambiguity assessment
+ambiguity score
+reason codes
+evidence spans
+```
+
+---
+
+## Integrity Signals
+
+Analyze market integrity:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/markets/<market_id>/integrity/analyze" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"force": false}'
+```
+
+Latest integrity:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/markets/<market_id>/integrity/latest" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Available information:
+
+```text
+integrity risk score
+integrity severity
+action hint
+empty/crossed/one-sided/wide-spread/stale signals
+price jump
+depth collapse
+reason codes
+```
+
+---
+
+## Equivalence
+
+Run equivalence scan:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/equivalence/runs" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "manual equivalence scan",
+    "max_pairs": 1000,
+    "build_classes": true,
+    "force": false
+  }'
+```
+
+List assessments:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/equivalence/assessments?limit=100" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Available information:
+
+```text
+equivalence status
+comparison permission
+overall score
+confidence score
+dimension scores
+outcome mappings
+source/deadline/threshold/timezone mismatch flags
+```
+
+---
+
+## Divergence
+
+Run divergence scan:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/divergence/runs" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "manual divergence scan",
+    "max_pairs": 1000,
+    "force": false
+  }'
+```
+
+Latest market divergence:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/markets/<market_id>/divergence/latest" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Available information:
+
+```text
+aligned price gap
+spread-adjusted gap
+equivalence context
+stale side
+weaker side
+data quality context
+integrity context
+divergence status
+review action hint
+```
+
+---
+
+## Pre-Trade Gate
+
+Check hypothetical intent:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/pretrade/check" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "market_id": "<market_id>",
+    "outcome_id": null,
+    "venue_id": null,
+    "strategy_context": "RESEARCH",
+    "side": "BUY",
+    "intent_type": "RESEARCH_ONLY",
+    "requested_price": null,
+    "requested_size_units": "1",
+    "requested_notional_usd": null,
+    "policy_id": null,
+    "force_recompute_context": false,
+    "metadata": {}
+  }'
+```
+
+Available information:
+
+```text
+pretrade action
+final allowed size
+hard blockers
+warnings
+reason codes
+resolution risk
+quality score
+integrity risk
+divergence score
+exposure risk
+```
+
+---
+
+## Paper Simulation
+
+Create default paper policy:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/paper/policies/default" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Simulate hypothetical intent:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/paper/simulate-intent" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "market_id": "<market_id>",
+    "outcome_id": null,
+    "venue_id": null,
+    "strategy_context": "RESEARCH",
+    "side": "BUY",
+    "intent_type": "RESEARCH_ONLY",
+    "requested_price": null,
+    "requested_size_units": "1",
+    "paper_policy_id": null,
+    "force_recompute_pretrade": false,
+    "metadata": {}
+  }'
+```
+
+Available information:
+
+```text
+paper order status
+simulated fills
+simulated ledger entries
+simulated position snapshot
+simulated portfolio snapshot
+simulated PnL fields
+```
+
+All paper outputs are simulated.
+
+---
+
+## Research Harness
+
+Create default strategies:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/research/strategies/default" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Generate signals:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/research/signals/generate" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "market_id": "<market_id>",
+    "force": false
+  }'
+```
+
+Run research:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/research/runs" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "manual research run",
+    "start_time": "2026-06-18T00:00:00Z",
+    "end_time": "2026-06-18T01:00:00Z",
+    "interval_seconds": 3600,
+    "max_steps": 100,
+    "max_proposals": 100,
+    "enable_paper_simulation": true,
+    "initial_cash_simulated": "1000",
+    "force": false,
+    "metadata": {}
+  }'
+```
+
+Available information:
+
+```text
+research strategies
+features
+signals
+hypothetical proposals
+pretrade outcomes
+paper simulation linkage
+simulated attribution
+```
+
+---
+
+## Scenario Features
+
+Import local scenario fixtures:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/scenario/import-fixtures" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "force": false
+  }'
+```
+
+Latest scenario feature:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/markets/<market_id>/scenario/latest" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Available information:
+
+```text
+scenario confidence
+scenario uncertainty
+sentiment score
+consensus score
+polarization score
+narrative risk
+shock risk
+key scenario labels
+reason codes
+```
+
+Scenario features do not directly change trading decisions.
+
+---
+
+## Replay
+
+Run replay:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/replay/runs" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "manual replay",
+    "policy_name": "pretrade_gate_v1",
+    "start_time": "2026-06-18T00:00:00Z",
+    "end_time": "2026-06-18T01:00:00Z",
+    "interval_seconds": 3600,
+    "max_steps": 100,
+    "persist_steps": true,
+    "force_recompute_verdicts": false,
+    "metadata": {}
+  }'
+```
+
+Available information:
+
+```text
+replay steps
+as-of decisions
+trust verdicts
+pretrade decisions
+paper metadata
+research metadata
+scenario metadata
+input/output hashes
+summary counts
+```
+
+---
+
+## Workbench
+
+Workbench status:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/workbench/status" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Build queue:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/workbench/queues/build" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "queue_name": "default_review_queue",
+    "limit": 100,
+    "force": false
+  }'
+```
+
+Latest queue:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/workbench/queues/latest?limit=20" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Queue summary:
+
+```bash
+curl -s "$API_BASE_URL/api/v1/workbench/queues/summary" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN"
+```
+
+Build decision card:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/workbench/markets/<market_id>/decision-card" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"force": false}'
+```
+
+Update queue item status:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/workbench/queues/items/<queue_item_id>/status" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "review_status": "WATCHING",
+    "reviewed_by": "operator",
+    "review_outcome": "NEEDS_MORE_DATA",
+    "review_reason": "Known data gap under review.",
+    "note_text": "No trading action.",
+    "tags": ["staging", "review"]
+  }'
+```
+
+Available information:
+
+```text
+active queue items
+priority buckets
+review statuses
+reason codes
+hard escalators
+soft escalators
+dampeners
+decision cards
+comparison cards
+desk notes
+review outcomes
+```
+
+---
+
+## Vendor Data Evaluation
+
+Register source:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/vendor-data/sources" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "vendor_name": "Kaggle",
+    "dataset_name": "polymarket_sample",
+    "dataset_version": "sample_v1",
+    "license_status": "SAMPLE_ONLY",
+    "metadata": {}
+  }'
+```
+
+Load sample:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/vendor-data/samples/load" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "vendor_source_id": "<vendor_source_id>",
+    "file_path": "sample_data/vendor_samples/polymarket_price_history_sample.csv",
+    "max_size_mb": 100
+  }'
+```
+
+Inspect sample:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/vendor-data/samples/<sample_file_id>/inspect" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Validate sample:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/vendor-data/samples/<sample_file_id>/validate" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Dry-run import:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/vendor-data/samples/<sample_file_id>/dry-run-import" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sample_kind": "ORDERBOOK",
+    "max_rows": 10000
+  }'
+```
+
+Evaluate vendor:
+
+```bash
+curl -s -X POST "$API_BASE_URL/api/v1/vendor-data/evaluate" \
+  -H "Authorization: Bearer $PREDICTION_DESK_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "vendor_source_id": "<vendor_source_id>",
+    "sample_file_ids": ["<sample_file_id>"]
+  }'
+```
+
+Available information:
+
+```text
+schema inspection
+token identifier detection
+timestamp detection
+price validation
+orderbook/trade classification
+dry-run would-create counts
+vendor evaluation scores
+strengths
+weaknesses
+questions for vendor
+recommendation
+```
+
+Vendor-data imports are currently dry-run only.
+
+---
+
+## CLI Examples
+
+Workbench status:
+
+```bash
+prediction-desk workbench-status
+```
+
+Latest queue:
+
+```bash
+prediction-desk workbench-queue --latest
+```
+
+Build a decision card:
+
+```bash
+prediction-desk workbench-card --market-id <market_id>
+```
+
+Run fixture DataOps locally:
+
+```bash
+prediction-desk dataops-cycle --mode FIXTURE
+```
+
+Run vendor sample evaluation:
+
+```bash
+prediction-desk vendor-register-source \
+  --vendor-name Kaggle \
+  --dataset-name polymarket_sample \
+  --dataset-version sample_v1 \
+  --license-status SAMPLE_ONLY
+```
+
+---
+
+## Key Safety Boundaries
+
+The project currently does **not** support:
+
+```text
+live trading
+real order placement
+order cancellation
+authenticated Polymarket CLOB trading
+venue trading credentials
+wallets
+private keys
+real account IDs
+real positions
+capital allocation
+public-read scheduling
+vendor production import
+```
+
+Anything that looks like execution is either:
+
+```text
+pre-trade review
+paper simulation
+research signal
+workbench review artifact
+```
+
+---
+
+## Current Project Classification
+
+Current classification:
+
+```text
+Cloud-deployed prediction-market trading-station and research platform
+with public-read ingestion, paper simulation, vendor-data evaluation,
+and desk workbench review workflow.
+```
+
+Not yet:
+
+```text
+validated profitable trading system
+live execution system
+fund-ready production trading desk
+```
+
+---
+
+## Next Milestone
+
+The next major milestone should be:
+
+```text
+Live Paper Strategy Smoke Test v1
+```
+
+Goal:
+
+```text
+Use actual current public market data, not historical-only data,
+to generate paper signals, pass them through pre-trade,
+simulate paper outcomes, and review them in the workbench.
+```
+
+This should answer:
+
+```text
+Can the system generate a defensible paper-trading report from live market conditions?
+Do spread, liquidity, and integrity filters make a difference?
+Do paper fills occur under conservative assumptions?
+Do workbench queue items help the human desk prioritize?
+```
+
+Still no live execution.
+
+---
+
+## Development Commands
+
+Install:
+
+```bash
 python -m pip install -e ".[dev]"
 ```
 
-Initialize the default local SQLite database and load deterministic fixtures:
-
-```bash
-prediction-desk init-db
-prediction-desk load-sample-data
-```
-
-Run the local API:
-
-```bash
-scripts/run_api.sh
-```
-
-Check health:
-
-```bash
-curl http://localhost:8000/healthz
-curl http://localhost:8000/readyz
-curl http://localhost:8000/api/v1/markets
-```
-
-## Quality Gates
-
-Run the standard local validation suite:
+Run tests:
 
 ```bash
 python -m pytest
 python -m ruff check .
 python -m mypy
-git diff --check
-DATABASE_URL=sqlite:////tmp/prediction_desk_migration_check.db scripts/migrate.sh
-docker compose config
 ```
 
-Optional Docker smoke:
+Run migrations:
 
 ```bash
+DATABASE_URL=sqlite:////tmp/prediction_desk_dev.db scripts/migrate.sh
+```
+
+Docker smoke:
+
+```bash
+docker compose config
+scripts/smoke_local.sh
 scripts/smoke_docker.sh
 ```
 
-Optional Postgres tests, when local Postgres is available:
+Azure workbench status:
 
 ```bash
-TEST_DATABASE_URL=postgresql+psycopg://prediction_desk:prediction_desk@localhost:55432/prediction_desk \
-  python -m pytest -m postgres
+scripts/staging_workbench_status.sh
 ```
 
-## Docker Compose
+---
 
-```bash
-cp .env.example .env
-docker compose build
-docker compose up -d postgres
-docker compose run --rm migrate
-docker compose run --rm app prediction-desk load-sample-data
-docker compose up -d app
-curl http://localhost:8000/healthz
-```
+## Operational Notes
 
-## API
-
-Local development can run without token enforcement. Staging should require bearer-token
-auth and should keep OpenAPI docs disabled.
-
-Important environment variables:
+Current Azure scheduled fixture job:
 
 ```text
-APP_ENV=staging
-REQUIRE_API_TOKEN=true
-ENABLE_OPENAPI_DOCS=false
-DATABASE_URL=postgresql+psycopg://...
-PREDICTION_DESK_API_TOKEN=...
-LOG_LEVEL=INFO
-APP_VERSION=...
-GIT_COMMIT=...
+Job:
+  pd-fixture-dataops-job
+
+Cron:
+  0 */12 * * *
+
+Command:
+  /app/scripts/run_fixture_dataops_job.sh
+
+Mode:
+  FIXTURE
+
+Public-read:
+  not scheduled
 ```
 
-Selected route groups:
+The fixture job is a staging heartbeat. It is not the main source of real research data.
 
-- `/api/v1/markets`
-- `/api/v1/ingestion/*`
-- `/api/v1/dataops/*`
-- `/api/v1/market-data/*`
-- `/api/v1/integrity/*`
-- `/api/v1/equivalence/*`
-- `/api/v1/divergence/*`
-- `/api/v1/pretrade/*`
-- `/api/v1/paper/*`
-- `/api/v1/research/*`
-- `/api/v1/workbench/*`
-- `/api/v1/vendor-data/*`
+The workbench should be used daily to capture human review feedback.
 
-See [docs/api.md](docs/api.md).
+---
 
-## DataOps And Public Read
+## Business Direction
 
-Fixture mode is deterministic and safe:
+The business is not “scrape prediction-market data.”
 
-```bash
-prediction-desk dataops-cycle --mode FIXTURE
-prediction-desk dataops-coverage --scope-type GLOBAL
-prediction-desk dataops-gaps
+The business is:
+
+```text
+Build a prediction-market trading station that filters fake edge,
+prioritizes real review candidates,
+and eventually routes only admissible, risk-controlled opportunities
+toward paper and then live execution.
 ```
 
-Manual public-read is opt-in and read-only:
+The moat should be:
 
-```bash
-CONFIRM_PUBLIC_READ_ONLY=true \
-PUBLIC_READ_VENUES=kalshi \
-MAX_PAYLOADS=5 \
-scripts/staging_public_read_pilot.sh
+```text
+contract interpretation
+token-aware normalization
+market-data quality
+integrity analysis
+equivalence/divergence logic
+pre-trade admissibility
+paper-execution realism
+human review feedback
+strategy evaluation discipline
 ```
 
-Targeted Polymarket follow-up uses persisted token-aware mappings:
-
-```bash
-prediction-desk dataops-run-collection \
-  --mode MANUAL_PUBLIC_FETCH \
-  --allow-network \
-  --venue polymarket \
-  --endpoint-type MARKET_DETAIL \
-  --endpoint-type ORDERBOOK \
-  --endpoint-type PRICE_HISTORY \
-  --market-id polymarket_market_... \
-  --max-payloads 5
-```
-
-Public-read scheduling remains held. Do not schedule `MANUAL_PUBLIC_FETCH`.
-
-See [docs/data_scaling.md](docs/data_scaling.md) and
-[docs/staging_dataops_pilot.md](docs/staging_dataops_pilot.md).
-
-## Desk Workbench
-
-The workbench turns stored evidence into desk review artifacts. It does not recommend or
-place trades.
-
-```bash
-prediction-desk workbench-run
-prediction-desk workbench-build-queue
-prediction-desk workbench-queue --latest
-prediction-desk workbench-queue-summary
-prediction-desk workbench-status
-prediction-desk workbench-card --market-id mkt_...
-prediction-desk workbench-notes
-prediction-desk workbench-add-note \
-  --market-id mkt_... \
-  --text "Reviewed data-quality context. No trading action."
-prediction-desk workbench-update-item-status \
-  --queue-item-id queue_item_... \
-  --review-status WATCHING \
-  --reviewed-by operator \
-  --review-outcome NEEDS_MORE_DATA \
-  --review-reason "Keep in daily review."
-```
-
-Queue items are append-only for audit. `--latest` returns the deduplicated active queue.
-Resolved and dismissed items are excluded by default from the active view.
-
-See [docs/desk_workbench.md](docs/desk_workbench.md).
-
-## Vendor Data Evaluation
-
-Vendor data is evaluated as raw material. It is not imported into canonical market-data
-tables in v1.
-
-Supported local file types:
-
-- CSV
-- JSON
-- JSONL
-- Parquet, when PyArrow/Pandas are available
-
-Register and evaluate a sample:
-
-```bash
-prediction-desk vendor-register-source \
-  --vendor-name Kaggle \
-  --dataset-name polymarket_tick_level_orderbook_dataset \
-  --dataset-version kaggle_marvingozo_current \
-  --license-status SAMPLE_ONLY
-
-prediction-desk vendor-load-sample \
-  --vendor-source-id vendor_source_... \
-  --file-path data/vendor_samples/kaggle/.../snapshots_2026-03-23.parquet \
-  --max-rows 10000
-
-prediction-desk vendor-inspect-sample \
-  --sample-file-id vendor_sample_... \
-  --max-rows 10000
-
-prediction-desk vendor-validate-sample \
-  --sample-file-id vendor_sample_... \
-  --max-rows 10000
-
-prediction-desk vendor-dry-run-import \
-  --sample-file-id vendor_sample_... \
-  --sample-kind orderbook \
-  --max-rows 10000
-
-prediction-desk vendor-evaluate \
-  --vendor-source-id vendor_source_... \
-  --sample-file-id vendor_sample_...
-```
-
-Mapping configs can interpret vendor-specific columns without changing global heuristics:
-
-```bash
-prediction-desk vendor-inspect-sample \
-  --sample-file-id vendor_sample_... \
-  --mapping-config sample_data/vendor_samples/mapping_configs/debayan31415_btc_5m_top_of_book.json
-```
-
-Large-file sampling is supported with `--max-rows`. CSV and JSONL stream bounded rows.
-Parquet uses PyArrow batch reads. Files over 500 MB should be sampled before processing.
-
-Recent local vendor evaluations:
-
-- `luciferforge/polymarket-historical-prices`: weak for replay; missing token IDs and
-  replay-safe availability timestamps.
-- `debayan31415/polymarket-5-minutes-btc-up-down-data`: prediction-market quote dataset,
-  useful for exploratory dry-run research, but missing token IDs and full L2 depth.
-- `marvingozo/polymarket-tick-level-orderbook-dataset`: sampled Parquet snapshot looked
-  promising for dry-run L2 research; license and timestamp semantics still need review.
-- `ithiria137/polymarket-l2-capture-cumulative-2026`: not downloaded; useful files are
-  large SQLite databases and need a SQLite sampling path or owner-provided sample.
-
-See [docs/vendor_data_evaluation.md](docs/vendor_data_evaluation.md).
-
-## Azure Staging
-
-Current Azure staging architecture:
-
-- Azure Container Apps API
-- Azure Database for PostgreSQL Flexible Server
-- Azure Container Registry
-- Azure Container Apps Job for fixture-only schedule
-- bearer-token auth required
-- OpenAPI docs disabled
-- public-read schedule held
-- fixture job runs every 12 hours
-
-Useful scripts:
-
-```bash
-scripts/azure_build_push.sh
-scripts/azure_deploy_staging.sh
-scripts/azure_migrate_and_verify.sh
-scripts/azure_staging_smoke.sh
-scripts/azure_inspect_counts.sh
-scripts/staging_workbench_smoke.sh
-scripts/staging_desk_cycle.sh
-scripts/staging_workbench_status.sh
-scripts/azure_enable_fixture_schedule.sh
-scripts/azure_disable_fixture_schedule.sh
-```
-
-Local secret files such as `.env.azure.staging.local` must not be committed.
-
-See [docs/azure_staging.md](docs/azure_staging.md) and
-[docs/deployment.md](docs/deployment.md).
-
-## Research And Replay Examples
-
-Resolution analysis:
-
-```bash
-prediction-desk analyze-rules --all
-prediction-desk diff-rule-snapshots --market-id mkt_rate_cut_rule_change_2026
-```
-
-Replay:
-
-```bash
-prediction-desk replay-run \
-  --policy trust_verdict_v1 \
-  --start 2026-06-16T12:00:00+00:00 \
-  --end 2026-06-16T13:00:00+00:00 \
-  --interval-seconds 3600 \
-  --market-id mkt_cpi_yoy_at_least_3pct_2026_09 \
-  --max-steps 10
-```
-
-Integrity:
-
-```bash
-prediction-desk integrity-run \
-  --asof 2026-06-16T12:45:00Z \
-  --market-id kalshi_market_kxweather_nyc_rain_20260930 \
-  --max-steps 10
-```
-
-Equivalence and divergence:
-
-```bash
-prediction-desk equivalence-run \
-  --asof 2026-06-16T12:45:00Z \
-  --max-pairs 10
-
-prediction-desk divergence-run \
-  --asof 2026-06-16T12:45:00Z \
-  --max-pairs 10
-```
-
-Pre-trade and paper simulation:
-
-```bash
-prediction-desk pretrade-create-default-policy
-prediction-desk pretrade-check \
-  --market-id kalshi_market_kxweather_nyc_rain_20260930 \
-  --strategy-context RESEARCH \
-  --intent-type RESEARCH_ONLY \
-  --requested-size-units 1
-
-prediction-desk paper-create-default-policy
-prediction-desk paper-simulate-intent \
-  --market-id mkt_cpi_yoy_at_least_3pct_2026_09 \
-  --intent-type AGGRESSIVE_LIMIT \
-  --requested-price 0.52
-```
-
-Strategy research:
-
-```bash
-prediction-desk research-create-default-strategies
-prediction-desk research-run \
-  --strategy-id research_strategy_baseline_research_only_v1 \
-  --start 2026-06-16T12:00:00+00:00 \
-  --end 2026-06-16T13:00:00+00:00 \
-  --max-steps 10 \
-  --no-paper-simulation
-```
-
-## Documentation Index
-
-- [API](docs/api.md)
-- [Azure staging](docs/azure_staging.md)
-- [Data scaling and DataOps](docs/data_scaling.md)
-- [Deployment](docs/deployment.md)
-- [Desk workbench](docs/desk_workbench.md)
-- [Divergence signals](docs/divergence_signals.md)
-- [Equivalence](docs/equivalence.md)
-- [Ingestion](docs/ingestion.md)
-- [Integrity signals](docs/integrity_signals.md)
-- [Market data](docs/market_data.md)
-- [Paper execution](docs/paper_execution.md)
-- [Pre-trade gate](docs/pretrade_gate.md)
-- [Replay](docs/replay.md)
-- [Resolution corpus](docs/resolution_corpus.md)
-- [Scenario features](docs/scenario_features.md)
-- [Strategy research](docs/strategy_research.md)
-- [Vendor data evaluation](docs/vendor_data_evaluation.md)
-
-## Development Notes
-
-The system is designed around as-of-safe data. `observed_at` describes when something
-happened, while `available_at` controls when replay/research was allowed to know it.
-Do not use future data in replay or workbench summaries.
-
-Use structured parsers and deterministic logic. Avoid ad hoc parsing when the standard
-library or an existing local helper is available.
-
-When adding new persisted objects, add an Alembic migration and verify both SQLite and
-Postgres-compatible behavior.
-
-When adding external datasets, keep raw downloads under `data/vendor_samples/` and commit
-only tiny synthetic fixtures or mapping configs under `sample_data/`.
+Data is fuel. The decision engine is the product.
