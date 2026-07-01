@@ -840,6 +840,13 @@ def ingestion_run_once_command(
         bool,
         typer.Option("--compute-quality/--no-compute-quality", help="Compute data quality."),
     ] = True,
+    endpoint_types: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--endpoint-type",
+            help="Endpoint types to fetch: MARKET_LIST, ORDERBOOK, PRICE_HISTORY. Can be repeated. Defaults to MARKET_LIST.",
+        ),
+    ] = None,
     database_url: Annotated[
         str | None, typer.Option("--database-url", help="Database URL to read/write.")
     ] = None,
@@ -867,6 +874,7 @@ def ingestion_run_once_command(
                     recompute_verdicts=recompute_verdicts,
                     derive_market_data=derive_market_data,
                     compute_quality=compute_quality,
+                    endpoint_types=endpoint_types or None,
                     repo=repo,
                 )
             except IngestionServiceError as exc:

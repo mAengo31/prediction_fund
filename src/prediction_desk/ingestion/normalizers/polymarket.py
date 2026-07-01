@@ -207,6 +207,7 @@ def _normalize_market_payload(
             for index, label in enumerate(outcome_labels)
         ],
         rule_snapshot=rule_snapshot,
+        orderbook_snapshot=_synthetic_orderbook_from_catalog(market_id, raw_payload.captured_at, market_payload),
         mapping=_mapping(
             raw_payload=raw_payload,
             external_event_id=event_external_id,
@@ -479,6 +480,60 @@ def _outcome_token_mappings(
     return mappings
 
 
+def _synthetic_orderbook_from_catalog(
+    market_id: str, captured_at: datetime, market_payload: dict[str, Any]
+) -> "OrderBookSnapshot | None":
+    """Build a minimal two-sided orderbook from Gamma API catalog fields.
+
+    bestBid and bestAsk are already in 0-1 decimal form (no division needed).
+    If only one side is present, synthesize the other with a 2-cent spread.
+    """
+    def _decimal_price(key: str) -> "Decimal | None":
+        v = market_payload.get(key)
+        if v is None:
+            return None
+        try:
+            val = Decimal(str(v))
+            return val if Decimal("0") < val < Decimal("1") else None
+        except Exception:
+            return None
+
+    bid = _decimal_price("bestBid")
+    ask = _decimal_price("bestAsk")
+
+    # Fall back to outcomePrices[0] as mid-price if bid/ask missing
+    if bid is None and ask is None:
+        try:
+            outcome_prices = market_payload.get("outcomePrices")
+            if outcome_prices:
+                import json as _json
+                prices = _json.loads(outcome_prices) if isinstance(outcome_prices, str) else outcome_prices
+                mid = Decimal(str(prices[0]))
+                if Decimal("0") < mid < Decimal("1"):
+                    bid = max(Decimal("0.01"), mid - Decimal("0.01"))
+                    ask = min(Decimal("0.99"), mid + Decimal("0.01"))
+        except Exception:
+            pass
+
+    if bid is None and ask is None:
+        return None
+
+    _TWO_CENTS = Decimal("0.02")
+    if bid is not None and ask is None:
+        ask = min(Decimal("0.99"), bid + _TWO_CENTS)
+    elif ask is not None and bid is None:
+        bid = max(Decimal("0.01"), ask - _TWO_CENTS)
+
+    return OrderBookSnapshot(
+        snapshot_id=f"ob_polymarket_catalog_{market_id}_{int(captured_at.timestamp())}",
+        market_id=market_id,
+        captured_at=captured_at,
+        bids=[PriceLevel(price=bid, quantity=Decimal("1"))],
+        asks=[PriceLevel(price=ask, quantity=Decimal("1"))],
+        metadata={"source": "polymarket_catalog_synthetic"},
+    )
+
+
 def _rule_text(market_payload: dict[str, Any]) -> str:
     parts = [
         _optional_str(
@@ -624,7 +679,10 @@ def _market_id(external_market_id: str) -> str:
 
 
 def _event_id(external_event_id: str) -> str:
-    return f"polymarket_event_{_slug(external_event_id)}"
+    slug = _slug(external_event_id)
+    if len(slug) > 100:
+        slug = slug[:83] + "_" + _short_digest(external_event_id)
+    return f"polymarket_event_{slug}"
 
 
 def _slug(value: str) -> str:

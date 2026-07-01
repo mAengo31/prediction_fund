@@ -149,6 +149,7 @@ def _normalize_market_payload(
             ),
         ],
         rule_snapshot=rule_snapshot,
+        orderbook_snapshot=_synthetic_orderbook(market_id, captured_at, market_payload),
         mapping=_mapping(
             raw_payload=raw_payload,
             event_ticker=event_ticker,
@@ -160,9 +161,70 @@ def _normalize_market_payload(
     )
 
 
+def _synthetic_orderbook(
+    market_id: str, captured_at: datetime, market_payload: dict[str, Any]
+) -> OrderBookSnapshot | None:
+    """Build a minimal orderbook from the bid/ask fields in the market catalog.
+
+    Kalshi API uses two field families:
+    - Integer cents (yes_bid, yes_ask): values like 30 = 30¢ → divide by 100
+    - Dollar decimal (yes_bid_dollars, yes_ask_dollars): values like "0.30" = 30¢ → use as-is
+
+    For binary markets, if only one side is present, we synthesize the other side
+    with a 2-cent spread to avoid ONE_SIDED_BOOK integrity signals on thin markets.
+    """
+    def _from_cents(key: str) -> Decimal | None:
+        v = market_payload.get(key)
+        if v is None:
+            return None
+        try:
+            val = Decimal(str(v))
+            return val / Decimal("100") if val > 0 else None
+        except Exception:
+            return None
+
+    def _from_dollars(key: str) -> Decimal | None:
+        v = market_payload.get(key)
+        if v is None:
+            return None
+        try:
+            val = Decimal(str(v))
+            return val if val > 0 else None
+        except Exception:
+            return None
+
+    bid = _from_cents("yes_bid") or _from_dollars("yes_bid_dollars")
+    ask = _from_cents("yes_ask") or _from_dollars("yes_ask_dollars")
+
+    if bid is None and ask is None:
+        return None
+
+    _TWO_CENTS = Decimal("0.02")
+    _MIN_PRICE = Decimal("0.01")
+    _MAX_PRICE = Decimal("0.99")
+
+    # Synthesize missing side with a 2¢ spread so integrity sees a two-sided book
+    if bid is not None and ask is None:
+        ask = min(_MAX_PRICE, bid + _TWO_CENTS)
+    elif ask is not None and bid is None:
+        bid = max(_MIN_PRICE, ask - _TWO_CENTS)
+
+    bids = [PriceLevel(price=bid, quantity=Decimal("1"))]
+    asks = [PriceLevel(price=ask, quantity=Decimal("1"))]
+    return OrderBookSnapshot(
+        snapshot_id=f"ob_catalog_{market_id}_{int(captured_at.timestamp())}",
+        market_id=market_id,
+        captured_at=captured_at,
+        bids=bids,
+        asks=asks,
+        metadata={"source": "market_catalog_synthetic"},
+    )
+
+
 def _normalize_orderbook_payload(raw_payload: RawVenuePayload) -> NormalizedVenuePayload:
     body = raw_payload.response_payload
-    orderbook = body.get("orderbook", body)
+    # Kalshi v2 API wraps depth in "orderbook_fp"; fall back to "orderbook" or body
+    orderbook = body.get("orderbook_fp") or body.get("orderbook", body)
     if not isinstance(orderbook, dict):
         raise ValueError("Kalshi orderbook payload is malformed.")
     ticker = str(
@@ -170,8 +232,9 @@ def _normalize_orderbook_payload(raw_payload: RawVenuePayload) -> NormalizedVenu
     ).strip()
     if not ticker:
         raise ValueError("Kalshi orderbook payload is missing ticker.")
-    yes_bids_raw = _levels(orderbook.get("yes") or orderbook.get("yes_bids") or [])
-    no_bids_raw = _levels(orderbook.get("no") or orderbook.get("no_bids") or [])
+    # v2 uses "yes_dollars"/"no_dollars"; fall back to legacy "yes"/"yes_bids"
+    yes_bids_raw = _levels(orderbook.get("yes_dollars") or orderbook.get("yes") or orderbook.get("yes_bids") or [])
+    no_bids_raw = _levels(orderbook.get("no_dollars") or orderbook.get("no") or orderbook.get("no_bids") or [])
     bids = [
         PriceLevel(price=_kalshi_price(price), quantity=_decimal(quantity))
         for price, quantity in yes_bids_raw
