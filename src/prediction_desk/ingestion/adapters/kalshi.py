@@ -38,11 +38,12 @@ class KalshiReadOnlyAdapter(FixtureBackedAdapter):
                 for payload in self.fixture_payloads(captured_at)
                 if payload.endpoint_type == VenueEndpointType.MARKET_LIST
             ]
+        import contextlib
         import time
         series = series or StrategyConfig.KALSHI_SERIES
         payloads = []
         for series_ticker in series:
-            try:
+            with contextlib.suppress(Exception):
                 payloads.append(self._get(
                     endpoint="/markets",
                     endpoint_type=VenueEndpointType.MARKET_LIST,
@@ -50,8 +51,6 @@ class KalshiReadOnlyAdapter(FixtureBackedAdapter):
                     params={"series_ticker": series_ticker, "limit": limit, "status": "open"},
                     captured_at=captured_at,
                 ))
-            except Exception:
-                pass
             time.sleep(0.3)
         return payloads
 

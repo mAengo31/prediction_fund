@@ -208,6 +208,8 @@ def _synthetic_orderbook(
         ask = min(_MAX_PRICE, bid + _TWO_CENTS)
     elif ask is not None and bid is None:
         bid = max(_MIN_PRICE, ask - _TWO_CENTS)
+    if bid is None or ask is None:
+        return None
 
     bids = [PriceLevel(price=bid, quantity=Decimal("1"))]
     asks = [PriceLevel(price=ask, quantity=Decimal("1"))]
@@ -233,8 +235,12 @@ def _normalize_orderbook_payload(raw_payload: RawVenuePayload) -> NormalizedVenu
     if not ticker:
         raise ValueError("Kalshi orderbook payload is missing ticker.")
     # v2 uses "yes_dollars"/"no_dollars"; fall back to legacy "yes"/"yes_bids"
-    yes_bids_raw = _levels(orderbook.get("yes_dollars") or orderbook.get("yes") or orderbook.get("yes_bids") or [])
-    no_bids_raw = _levels(orderbook.get("no_dollars") or orderbook.get("no") or orderbook.get("no_bids") or [])
+    yes_bids_raw = _levels(
+        orderbook.get("yes_dollars") or orderbook.get("yes") or orderbook.get("yes_bids") or []
+    )
+    no_bids_raw = _levels(
+        orderbook.get("no_dollars") or orderbook.get("no") or orderbook.get("no_bids") or []
+    )
     bids = [
         PriceLevel(price=_kalshi_price(price), quantity=_decimal(quantity))
         for price, quantity in yes_bids_raw

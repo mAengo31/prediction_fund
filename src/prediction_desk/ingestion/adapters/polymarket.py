@@ -43,7 +43,8 @@ class PolymarketReadOnlyAdapter(FixtureBackedAdapter):
                 if payload.endpoint_type == VenueEndpointType.MARKET_LIST
             ]
         tag_ids = tag_ids or StrategyConfig.POLYMARKET_TAG_IDS
-        min_liquidity = min_liquidity if min_liquidity is not None else StrategyConfig.POLYMARKET_MIN_LIQUIDITY
+        if min_liquidity is None:
+            min_liquidity = StrategyConfig.POLYMARKET_MIN_LIQUIDITY
 
         seen_condition_ids: set[str] = set()
         collected_markets: list[dict] = []
@@ -76,7 +77,11 @@ class PolymarketReadOnlyAdapter(FixtureBackedAdapter):
                             liq = float(market.get("liquidityNum") or market.get("liquidity") or 0)
                             if liq < min_liquidity:
                                 continue
-                            cid = market.get("conditionId") or market.get("condition_id") or market.get("id", "")
+                            cid = (
+                                market.get("conditionId")
+                                or market.get("condition_id")
+                                or market.get("id", "")
+                            )
                             if not cid or cid in seen_condition_ids:
                                 continue
                             seen_condition_ids.add(cid)
@@ -89,7 +94,8 @@ class PolymarketReadOnlyAdapter(FixtureBackedAdapter):
                         break
                     offset += limit
 
-        from datetime import UTC, datetime as _dt
+        from datetime import UTC
+        from datetime import datetime as _dt
         return [
             RawVenuePayload.from_payload(
                 venue_id=self.venue_id,

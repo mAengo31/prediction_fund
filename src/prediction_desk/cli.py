@@ -844,7 +844,10 @@ def ingestion_run_once_command(
         list[str] | None,
         typer.Option(
             "--endpoint-type",
-            help="Endpoint types to fetch: MARKET_LIST, ORDERBOOK, PRICE_HISTORY. Can be repeated. Defaults to MARKET_LIST.",
+            help=(
+                "Endpoint types to fetch: MARKET_LIST, ORDERBOOK, PRICE_HISTORY. "
+                "Can be repeated. Defaults to MARKET_LIST."
+            ),
         ),
     ] = None,
     database_url: Annotated[
