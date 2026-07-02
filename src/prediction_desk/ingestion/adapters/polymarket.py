@@ -11,9 +11,10 @@ from prediction_desk.ingestion.adapters.base import FixtureBackedAdapter
 from prediction_desk.ingestion.enums import VenueEndpointType
 from prediction_desk.ingestion.fixtures import default_fixture_root
 from prediction_desk.ingestion.models import RawVenuePayload
+from prediction_desk.strategy_config import StrategyConfig
 
-POLYMARKET_GAMMA_BASE_URL = "https://gamma-api.polymarket.com"
-POLYMARKET_CLOB_BASE_URL = "https://clob.polymarket.com"
+POLYMARKET_GAMMA_BASE_URL = StrategyConfig.POLYMARKET_GAMMA_BASE
+POLYMARKET_CLOB_BASE_URL  = StrategyConfig.POLYMARKET_CLOB_BASE
 POLYMARKET_PRICE_HISTORY_DEFAULT_INTERVAL = "1d"
 POLYMARKET_PRICE_HISTORY_DEFAULT_FIDELITY_MINUTES = 60
 USER_AGENT = "prediction-desk/0.1 read-only research"
@@ -32,6 +33,8 @@ class PolymarketReadOnlyAdapter(FixtureBackedAdapter):
         limit: int = 100,
         allow_network: bool = False,
         captured_at: datetime | None = None,
+        tag_ids: list[int] | None = None,
+        min_liquidity: float | None = None,
     ) -> list[RawVenuePayload]:
         if not allow_network:
             return [
@@ -39,13 +42,70 @@ class PolymarketReadOnlyAdapter(FixtureBackedAdapter):
                 for payload in self.fixture_payloads(captured_at)
                 if payload.endpoint_type == VenueEndpointType.MARKET_LIST
             ]
+        tag_ids = tag_ids or StrategyConfig.POLYMARKET_TAG_IDS
+        if min_liquidity is None:
+            min_liquidity = StrategyConfig.POLYMARKET_MIN_LIQUIDITY
+
+        seen_condition_ids: set[str] = set()
+        collected_markets: list[dict] = []
+
+        with httpx.Client(
+            timeout=10.0,
+            headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+        ) as client:
+            for tag_id in tag_ids:
+                offset = 0
+                while True:
+                    response = client.get(
+                        f"{POLYMARKET_GAMMA_BASE_URL}/events",
+                        params={
+                            "tag_id": tag_id,
+                            "active": "true",
+                            "closed": "false",
+                            "order": "liquidity",
+                            "ascending": "false",
+                            "limit": limit,
+                            "offset": offset,
+                        },
+                    )
+                    response.raise_for_status()
+                    events = response.json()
+                    if not isinstance(events, list) or not events:
+                        break
+                    for event in events:
+                        for market in (event.get("markets") or []):
+                            liq = float(market.get("liquidityNum") or market.get("liquidity") or 0)
+                            if liq < min_liquidity:
+                                continue
+                            cid = (
+                                market.get("conditionId")
+                                or market.get("condition_id")
+                                or market.get("id", "")
+                            )
+                            if not cid or cid in seen_condition_ids:
+                                continue
+                            seen_condition_ids.add(cid)
+                            collected_markets.append(market)
+                    last_liq = sum(
+                        float(m.get("liquidityNum") or 0)
+                        for m in (events[-1].get("markets") or [])
+                    )
+                    if len(events) < limit or last_liq < min_liquidity:
+                        break
+                    offset += limit
+
+        from datetime import UTC
+        from datetime import datetime as _dt
         return [
-            self._get(
-                source_url=f"{POLYMARKET_GAMMA_BASE_URL}/markets",
+            RawVenuePayload.from_payload(
+                venue_id=self.venue_id,
+                venue_name=self.venue_name,
                 endpoint_type=VenueEndpointType.MARKET_LIST,
                 external_id=None,
-                params={"limit": limit},
-                captured_at=captured_at,
+                captured_at=captured_at or _dt.now(tz=UTC),
+                source_url=f"{POLYMARKET_GAMMA_BASE_URL}/events",
+                request_params={"tag_ids": tag_ids, "min_liquidity": min_liquidity},
+                response_payload={"markets": collected_markets},
             )
         ]
 

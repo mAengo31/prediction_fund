@@ -11,8 +11,9 @@ from prediction_desk.ingestion.adapters.base import FixtureBackedAdapter
 from prediction_desk.ingestion.enums import VenueEndpointType
 from prediction_desk.ingestion.fixtures import default_fixture_root
 from prediction_desk.ingestion.models import RawVenuePayload
+from prediction_desk.strategy_config import StrategyConfig
 
-KALSHI_PUBLIC_BASE_URL = "https://api.elections.kalshi.com/trade-api/v2"
+KALSHI_PUBLIC_BASE_URL = StrategyConfig.KALSHI_BASE
 USER_AGENT = "prediction-desk/0.1 read-only research"
 
 
@@ -29,6 +30,7 @@ class KalshiReadOnlyAdapter(FixtureBackedAdapter):
         limit: int = 100,
         allow_network: bool = False,
         captured_at: datetime | None = None,
+        series: list[str] | None = None,
     ) -> list[RawVenuePayload]:
         if not allow_network:
             return [
@@ -36,15 +38,21 @@ class KalshiReadOnlyAdapter(FixtureBackedAdapter):
                 for payload in self.fixture_payloads(captured_at)
                 if payload.endpoint_type == VenueEndpointType.MARKET_LIST
             ]
-        return [
-            self._get(
-                endpoint="/markets",
-                endpoint_type=VenueEndpointType.MARKET_LIST,
-                external_id=None,
-                params={"limit": limit},
-                captured_at=captured_at,
-            )
-        ]
+        import contextlib
+        import time
+        series = series or StrategyConfig.KALSHI_SERIES
+        payloads = []
+        for series_ticker in series:
+            with contextlib.suppress(Exception):
+                payloads.append(self._get(
+                    endpoint="/markets",
+                    endpoint_type=VenueEndpointType.MARKET_LIST,
+                    external_id=None,
+                    params={"series_ticker": series_ticker, "limit": limit, "status": "open"},
+                    captured_at=captured_at,
+                ))
+            time.sleep(0.3)
+        return payloads
 
     def fetch_market_detail(
         self,

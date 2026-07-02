@@ -49,6 +49,8 @@ class MarketDataService:
         venue = self.repo.get_venue(market.venue_id)
         if venue is None:
             raise MarketDataServiceError("venue_not_found")
+        if not orderbook.bids and not orderbook.asks:
+            return MarketDataDerivationResult(market_id=market.market_id)
         price = derive_price_snapshot_from_orderbook(market, orderbook, venue)
         liquidity = derive_liquidity_snapshot_from_orderbook(market, orderbook, venue)
         result = MarketDataDerivationResult(market_id=market.market_id)
